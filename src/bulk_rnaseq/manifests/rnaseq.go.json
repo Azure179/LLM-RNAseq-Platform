@@ -1,0 +1,237 @@
+{
+  "manifest_schema_version": "1.0",
+  "name": "rnaseq.go",
+  "version": "1.0.0",
+  "description": "Perform offline GO over-representation analysis using a selected gene list, user mapping and explicit eligible background.",
+  "category": "over_representation_analysis",
+  "availability": {
+    "status": "implemented",
+    "callable": true
+  },
+  "entry_point": "bulk_rnaseq.skills.go_enrichment:run_go_enrichment",
+  "use_when": [
+    "Test over-representation of GO annotations in a selected non-empty query against eligible RNA-seq background.",
+    "Use user-provided GO mapping for any species with matching identifiers; gene list must be a subset of the declared background."
+  ],
+  "do_not_use_when": [
+    "No declared universe/analysis_genes; using entire species annotation as an automatic RNA-seq background.",
+    "Raw counts, normalized expression or a ranked-list GSEA request.",
+    "Assuming human/mouse annotation or guessing transcript-to-gene ID conversions."
+  ],
+  "raw_count_requirement": "not_accepted",
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "gene_list": {
+        "$ref": "schemas/input-types.schema.json#/$defs/gene_list"
+      },
+      "gene_to_go_mapping": {
+        "$ref": "schemas/input-types.schema.json#/$defs/path",
+        "description": "Custom CSV/TSV/XLSX: gene_id,go_id (one pair per row); optional ontology and go_name. eggNOG: query/#query and GOs with comma/semicolon separated GO:NNNNNNN IDs."
+      },
+      "output_dir": {
+        "$ref": "schemas/input-types.schema.json#/$defs/output_dir"
+      },
+      "timeout": {
+        "$ref": "schemas/input-types.schema.json#/$defs/timeout"
+      },
+      "rscript_executable": {
+        "$ref": "schemas/input-types.schema.json#/$defs/rscript"
+      },
+      "universe": {
+        "$ref": "schemas/input-types.schema.json#/$defs/universe"
+      },
+      "analysis_genes": {
+        "$ref": "schemas/input-types.schema.json#/$defs/analysis_genes"
+      },
+      "pvalue_threshold": {
+        "$ref": "schemas/input-types.schema.json#/$defs/closed_probability",
+        "default": 0.05
+      },
+      "padj_threshold": {
+        "$ref": "schemas/input-types.schema.json#/$defs/closed_probability"
+      },
+      "ontology": {
+        "type": "string",
+        "enum": [
+          "ALL",
+          "BP",
+          "MF",
+          "CC"
+        ],
+        "default": "ALL"
+      },
+      "mapping_sheet": {
+        "$ref": "schemas/input-types.schema.json#/$defs/mapping_sheet"
+      }
+    },
+    "required": [
+      "gene_list",
+      "gene_to_go_mapping",
+      "output_dir"
+    ],
+    "additionalProperties": false,
+    "oneOf": [
+      {
+        "required": [
+          "universe"
+        ],
+        "properties": {
+          "universe": {
+            "type": "string"
+          },
+          "analysis_genes": {
+            "type": "null"
+          }
+        }
+      },
+      {
+        "required": [
+          "analysis_genes"
+        ],
+        "properties": {
+          "analysis_genes": {
+            "type": "string"
+          },
+          "universe": {
+            "type": "null"
+          }
+        }
+      }
+    ]
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "allOf": [
+      {
+        "$ref": "schemas/skill-result.schema.json"
+      }
+    ],
+    "properties": {
+      "skill_name": {
+        "const": "rnaseq.go"
+      }
+    },
+    "if": {
+      "properties": {
+        "status": {
+          "const": "succeeded"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "then": {
+      "properties": {
+        "outputs": {
+          "type": "object",
+          "required": [
+            "enrichment",
+            "all_results",
+            "dotplot",
+            "barplot",
+            "query",
+            "universe",
+            "mapping",
+            "summary_json"
+          ],
+          "properties": {
+            "enrichment": {
+              "type": "string",
+              "description": "go_enrichment.csv: significant GO terms with overlap, background/query size, pvalue, padj and contributing genes."
+            },
+            "all_results": {
+              "type": "string",
+              "description": "go_all_results.csv: full tested family including zero-overlap terms."
+            },
+            "dotplot": {
+              "type": "string",
+              "description": "go_dotplot.png: top enriched terms, or explanatory empty plot."
+            },
+            "barplot": {
+              "type": "string",
+              "description": "go_barplot.png: top enriched terms, or explanatory empty plot."
+            },
+            "query": {
+              "type": "string",
+              "description": "query_used.csv: actual mapped foreground."
+            },
+            "universe": {
+              "type": "string",
+              "description": "universe_used.csv: actual eligible, mapped background."
+            },
+            "mapping": {
+              "type": "string",
+              "description": "mapping_used.csv: actual associations used."
+            },
+            "summary_json": {
+              "type": "string",
+              "description": "summary.json: SkillResult 2.0 including mapping/background sizes and methods."
+            }
+          }
+        }
+      }
+    }
+  },
+  "requirements": {
+    "python": ">=3.13,<3.14",
+    "executables": [
+      "Rscript"
+    ],
+    "r_packages": [
+      {
+        "name": "stats",
+        "when": "always; bundled with base R; fisher.test(alternative='greater') and p.adjust(method='BH')"
+      }
+    ],
+    "python_packages": [
+      {
+        "name": "openpyxl>=3.1.5,<4",
+        "when": "XLSX mapping input only; installed as existing package dependency"
+      }
+    ],
+    "filesystem": "Readable local inputs and a new/empty writable output_dir; no network annotation lookup."
+  },
+  "dependencies": {
+    "workflow": {
+      "project_inputs": {
+        "gene_list": "gene_list",
+        "gene_to_go_mapping": "go_mapping",
+        "universe": "universe",
+        "analysis_genes": "analysis_genes"
+      },
+      "subset_source_outputs": [],
+      "subset_target_inputs": [
+        "gene_list"
+      ]
+    },
+    "upstream": [
+      {
+        "skill": "rnaseq.deg",
+        "output": "filtered_csv",
+        "input": "gene_list",
+        "notes": "Optional source: selected DEGs; external non-empty selected gene list also accepted."
+      },
+      {
+        "skill": "rnaseq.deg",
+        "output": "deg_csv",
+        "input": "analysis_genes",
+        "notes": "Optional background source; excludes NA padj/log2FC. Exactly one background input."
+      }
+    ],
+    "downstream": []
+  },
+  "limitations": [
+    "Uses base-R Fisher exact test + BH, not clusterProfiler or an organism annotation package.",
+    "Effective background = declared eligible genes intersect supplied mapping; no automatic background fallback.",
+    "No mapped query is an error. Zero significant terms is succeeded with warnings and empty-result figures.",
+    "No automatic gene ID conversion: eggNOG query IDs must already match query/background, or use an explicit audited preprocessing crosswalk.",
+    "CSV/TSV and XLSX mappings supported, not binary legacy .xls; multiple XLSX sheets require mapping_sheet.",
+    "Significant means pvalue <= threshold AND padj <= threshold AND overlap > 0; tested family includes zero-overlap terms.",
+    "GO ID syntax validation is not ontology-database existence validation; no ancestor propagation.",
+    "BP/MF/CC requires ontology for every mapped term; ordinary eggNOG GOs lack this field, so use ALL or an externally annotated custom mapping.",
+    "eggNOG protein Description is not a GO term name; missing term names remain GO IDs."
+  ]
+}

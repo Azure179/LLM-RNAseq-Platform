@@ -1,0 +1,41 @@
+{
+  "manifest_schema_version": "1.0",
+  "name": "rnaseq.gsea",
+  "version": "0.0.0",
+  "description": "Planned ranked gene-set enrichment capability; NOT implemented and NOT executable in the current package.",
+  "category": "ranked_gene_set_enrichment",
+  "availability": {
+    "status": "not_implemented",
+    "callable": false
+  },
+  "entry_point": null,
+  "use_when": [
+    "Capability discovery or future planning only; never dispatch an analysis call."
+  ],
+  "do_not_use_when": [
+    "Any current execution request. No GSEA function, algorithm, parameter contract or verified outputs exist."
+  ],
+  "raw_count_requirement": "not_applicable: planned ranked-gene input, not direct raw-count analysis",
+  "input_schema": false,
+  "output_schema": false,
+  "requirements": {
+    "python": null,
+    "executables": [],
+    "r_packages": [],
+    "python_packages": [],
+    "filesystem": "Not applicable until implemented."
+  },
+  "dependencies": {
+    "upstream": [],
+    "downstream": [],
+    "planned_data": [
+      "A full ranked gene list with a documented signed ranking statistic and identifier-matched gene sets; not only significant DEGs.",
+      "Ranking construction, duplicate/tie handling, implementation and output contract require a future explicitly authorized phase."
+    ]
+  },
+  "limitations": [
+    "Boolean false JSON Schemas reject every input and output, preventing this placeholder from advertising a callable interface.",
+    "No fabricated entry point, dependency version, NES, pvalue, padj or output file.",
+    "Do not silently substitute GO/KEGG ORA for GSEA."
+  ]
+}

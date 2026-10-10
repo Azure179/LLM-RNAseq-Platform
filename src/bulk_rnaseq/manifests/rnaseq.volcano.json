@@ -1,0 +1,144 @@
+{
+  "manifest_schema_version": "1.0",
+  "name": "rnaseq.volcano",
+  "version": "1.1.0",
+  "description": "Classify and visualize an existing full DEG result without rerunning DESeq2.",
+  "category": "visualization",
+  "availability": {
+    "status": "implemented",
+    "callable": true
+  },
+  "entry_point": "bulk_rnaseq.skills.volcano:run_volcano",
+  "use_when": [
+    "A full DEG result already exists and the user wants Up/Down/NS classification and a volcano plot."
+  ],
+  "do_not_use_when": [
+    "Raw/normalized expression instead of DEG statistics.",
+    "Requests for new DESeq2 testing or complete NS counts from a prefiltered DEG table."
+  ],
+  "raw_count_requirement": "not_accepted",
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "deg_result_file": {
+        "$ref": "schemas/input-types.schema.json#/$defs/deg"
+      },
+      "output_dir": {
+        "$ref": "schemas/input-types.schema.json#/$defs/output_dir"
+      },
+      "timeout": {
+        "$ref": "schemas/input-types.schema.json#/$defs/timeout"
+      },
+      "rscript_executable": {
+        "$ref": "schemas/input-types.schema.json#/$defs/rscript"
+      },
+      "padj_threshold": {
+        "$ref": "schemas/input-types.schema.json#/$defs/open_probability"
+      },
+      "log2fc_threshold": {
+        "$ref": "schemas/input-types.schema.json#/$defs/lfc"
+      },
+      "top_n_labels": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 10
+      },
+      "label_genes": {"type": ["array", "null"], "items": {"type": "string", "minLength": 1, "maxLength": 160}, "maxItems": 200, "uniqueItems": true, "default": null, "description": "Exact gene IDs explicitly requested by the user; union with top_n_labels, no symbol/ID inference."},
+      "color_up": {"type": "string", "pattern": "^(#[0-9a-fA-F]{6}|[A-Za-z]{1,30})$", "default": "#D54E4E"},
+      "color_down": {"type": "string", "pattern": "^(#[0-9a-fA-F]{6}|[A-Za-z]{1,30})$", "default": "#3974B5"},
+      "color_ns": {"type": "string", "pattern": "^(#[0-9a-fA-F]{6}|[A-Za-z]{1,30})$", "default": "#A8A8A8"},
+      "title": {"type": "string", "maxLength": 160, "default": "Volcano plot"},
+      "figure_width": {"type": "integer", "minimum": 600, "maximum": 3000, "default": 1200, "description": "Width in pixels."},
+      "figure_height": {"type": "integer", "minimum": 600, "maximum": 3000, "default": 900, "description": "Height in pixels."}
+    },
+    "required": [
+      "deg_result_file",
+      "output_dir"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "allOf": [
+      {
+        "$ref": "schemas/skill-result.schema.json"
+      }
+    ],
+    "properties": {
+      "skill_name": {
+        "const": "rnaseq.volcano"
+      }
+    },
+    "if": {
+      "properties": {
+        "status": {
+          "const": "succeeded"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "then": {
+      "properties": {
+        "outputs": {
+          "type": "object",
+          "required": [
+            "plot",
+            "plot_data",
+            "summary_json"
+          ],
+          "properties": {
+            "plot": {
+              "type": "string",
+              "description": "volcano_plot.png: log2FC versus -log10(padj)."
+            },
+            "plot_data": {
+              "type": "string",
+              "description": "volcano_plot_data.csv: original required DEG columns plus category, neg_log10_padj, plotted, label, padj_zero_adjusted, excluded_reason."
+            },
+            "summary_json": {
+              "type": "string",
+              "description": "summary.json: SkillResult 2.0."
+            }
+          }
+        }
+      }
+    }
+  },
+  "requirements": {
+    "python": ">=3.13,<3.14",
+    "executables": [
+      "Rscript"
+    ],
+    "r_packages": [],
+    "python_packages": [],
+    "filesystem": "Readable local inputs and a new/empty writable output_dir; no network annotation lookup."
+  },
+  "dependencies": {
+    "workflow": {
+      "project_inputs": {
+        "deg_result_file": "deg_result"
+      },
+      "subset_source_outputs": [],
+      "subset_target_inputs": []
+    },
+    "upstream": [
+      {
+        "skill": "rnaseq.deg",
+        "output": "deg_csv",
+        "input": "deg_result_file",
+        "notes": "Recommended source; equivalent external full DEG CSV accepted."
+      }
+    ],
+    "downstream": []
+  },
+  "limitations": [
+    "No DESeq2 call or modification of source DEG results.",
+    "Significance is strict padj < threshold; abs(log2FC) >= threshold with positive/negative direction (zero effect remains NS).",
+    "NA padj/log2FC excluded from plotted points and retained as NS; zero padj gets a finite display-only height, not altered statistical significance.",
+    "Explicit exact gene labels are combined with Top N labels; absent/unplottable IDs produce a warning, not alias inference.",
+    "Renders static PNG; dense labels may overlap; no interactive plotting; plot_data is not normalized expression."
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "manifest_schema_version": "1.0",
+  "name": "rnaseq.pca",
+  "version": "1.0.0",
+  "description": "Explore sample relationships using DESeq2 blind VST followed by centered, unscaled PCA.",
+  "category": "exploratory_analysis",
+  "availability": {
+    "status": "implemented",
+    "callable": true
+  },
+  "entry_point": "bulk_rnaseq.skills.pca:run_pca",
+  "use_when": [
+    "Inspect overall sample relationships in raw bulk RNA-seq counts; at least 3 samples and 2 non-zero genes; group labels may have one or multiple groups."
+  ],
+  "do_not_use_when": [
+    "PCA directly on raw counts or TPM/FPKM using this Skill.",
+    "Differential testing, batch correction, or requests to obtain an exported normalized expression matrix."
+  ],
+  "raw_count_requirement": "required",
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "count_matrix": {
+        "$ref": "schemas/input-types.schema.json#/$defs/counts"
+      },
+      "metadata": {
+        "$ref": "schemas/input-types.schema.json#/$defs/metadata"
+      },
+      "group_column": {
+        "$ref": "schemas/input-types.schema.json#/$defs/identifier"
+      },
+      "output_dir": {
+        "$ref": "schemas/input-types.schema.json#/$defs/output_dir"
+      },
+      "timeout": {
+        "$ref": "schemas/input-types.schema.json#/$defs/timeout"
+      },
+      "rscript_executable": {
+        "$ref": "schemas/input-types.schema.json#/$defs/rscript"
+      }
+    },
+    "required": [
+      "count_matrix",
+      "metadata",
+      "group_column",
+      "output_dir"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "allOf": [
+      {
+        "$ref": "schemas/skill-result.schema.json"
+      }
+    ],
+    "properties": {
+      "skill_name": {
+        "const": "rnaseq.pca"
+      }
+    },
+    "if": {
+      "properties": {
+        "status": {
+          "const": "succeeded"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "then": {
+      "properties": {
+        "outputs": {
+          "type": "object",
+          "required": [
+            "coordinates",
+            "variance",
+            "plot",
+            "summary_json"
+          ],
+          "properties": {
+            "coordinates": {
+              "type": "string",
+              "description": "pca_coordinates.csv: sample, PC1, PC2, group."
+            },
+            "variance": {
+              "type": "string",
+              "description": "pca_variance.json: PC1/PC2 explained variance percentages."
+            },
+            "plot": {
+              "type": "string",
+              "description": "pca_plot.png: group-colored 2D PCA."
+            },
+            "summary_json": {
+              "type": "string",
+              "description": "summary.json: SkillResult 2.0."
+            }
+          }
+        }
+      }
+    }
+  },
+  "requirements": {
+    "python": ">=3.13,<3.14",
+    "executables": [
+      "Rscript"
+    ],
+    "r_packages": [
+      {
+        "name": "DESeq2",
+        "when": "always"
+      }
+    ],
+    "python_packages": [],
+    "filesystem": "Readable local inputs and a new/empty writable output_dir; no network annotation lookup."
+  },
+  "dependencies": {
+    "workflow": {
+      "project_inputs": {
+        "count_matrix": "count_matrix",
+        "metadata": "metadata"
+      },
+      "subset_source_outputs": [],
+      "subset_target_inputs": []
+    },
+    "upstream": [],
+    "downstream": []
+  },
+  "limitations": [
+    "VST dispersion fitting also needs informative data; two non-zero genes alone do not guarantee success.",
+    "Uses ~1, blind VST and all variable VST genes; no top-variable-gene parameter, 3D or interactive plotting.",
+    "PCA DOES NOT export VST expression: coordinates/variance are not valid Heatmap expression inputs.",
+    "Heatmap raw-count mode reuses the same vst_common.R implementation, not a PCA output artifact."
+  ]
+}

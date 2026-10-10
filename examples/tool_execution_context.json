@@ -1,0 +1,16 @@
+{
+  "project_root": ".",
+  "output_root": "outputs/single_tool",
+  "bindings": {
+    "rnaseq.deg": {
+      "count_matrix_path": "examples/data/counts.csv",
+      "metadata_path": "examples/data/metadata.csv"
+    },
+    "rnaseq.pca": {
+      "count_matrix": "examples/data/counts.csv",
+      "metadata": "examples/data/metadata.csv"
+    }
+  },
+  "confirmed_parameters": {"rnaseq.pca": {"group_column": "condition"}},
+  "rscript_executable": "Rscript"
+}

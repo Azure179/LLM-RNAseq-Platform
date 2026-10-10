@@ -1,0 +1,229 @@
+{
+  "manifest_schema_version": "1.0",
+  "name": "rnaseq.heatmap",
+  "version": "1.1.0",
+  "description": "Plot top significant DEGs using VST expression, with per-gene row Z-scores.",
+  "category": "visualization",
+  "availability": {
+    "status": "implemented",
+    "callable": true
+  },
+  "entry_point": "bulk_rnaseq.skills.heatmap:run_heatmap",
+  "use_when": [
+    "An existing DEG result and matching metadata are available, plus exactly one of VST expression or raw counts.",
+    "Explore at least one significant, overlapping, non-constant DEG across at least two samples."
+  ],
+  "do_not_use_when": [
+    "Using PCA coordinates, row Z-scores or TPM/FPKM as normalized_expression.",
+    "Requesting new differential testing, batch correction, or configurable clustering."
+  ],
+  "raw_count_requirement": "conditional: raw_counts mode only; never plotted directly",
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "deg_result_file": {
+        "$ref": "schemas/input-types.schema.json#/$defs/deg"
+      },
+      "metadata": {
+        "$ref": "schemas/input-types.schema.json#/$defs/metadata"
+      },
+      "group_column": {
+        "$ref": "schemas/input-types.schema.json#/$defs/identifier"
+      },
+      "output_dir": {
+        "$ref": "schemas/input-types.schema.json#/$defs/output_dir"
+      },
+      "timeout": {
+        "$ref": "schemas/input-types.schema.json#/$defs/timeout"
+      },
+      "rscript_executable": {
+        "$ref": "schemas/input-types.schema.json#/$defs/rscript"
+      },
+      "normalized_expression": {
+        "anyOf": [
+          {
+            "$ref": "schemas/input-types.schema.json#/$defs/path"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Caller-supplied VST CSV: gene_id then sample columns, finite values, no NA. Not TPM/FPKM, raw counts or heatmap row Z-scores."
+      },
+      "raw_counts": {
+        "anyOf": [
+          {
+            "$ref": "schemas/input-types.schema.json#/$defs/counts"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "top_n": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 50
+      },
+      "gene_list": {"type": ["array", "null"], "items": {"type": "string", "minLength": 1, "maxLength": 160}, "maxItems": 200, "uniqueItems": true, "default": null, "description": "Explicit exact IDs; restrict significant candidates before top_n, never infer gene IDs."},
+      "ranking_method": {"type": "string", "enum": ["padj", "abs_log2fc"], "default": "padj"},
+      "show_gene_names": {"type": "boolean", "default": true},
+      "title": {"type": "string", "maxLength": 160, "default": "Top DEG expression heatmap"},
+      "figure_width": {"type": "integer", "minimum": 600, "maximum": 3000, "default": 1500},
+      "figure_height": {"type": ["integer", "null"], "minimum": 600, "maximum": 3000, "default": null, "description": "Pixels; null retains automatic height."},
+      "padj_threshold": {
+        "$ref": "schemas/input-types.schema.json#/$defs/open_probability"
+      },
+      "log2fc_threshold": {
+        "$ref": "schemas/input-types.schema.json#/$defs/lfc"
+      }
+    },
+    "required": [
+      "deg_result_file",
+      "metadata",
+      "group_column",
+      "output_dir"
+    ],
+    "additionalProperties": false,
+    "oneOf": [
+      {
+        "required": [
+          "normalized_expression"
+        ],
+        "properties": {
+          "normalized_expression": {
+            "type": "string"
+          },
+          "raw_counts": {
+            "type": "null"
+          }
+        }
+      },
+      {
+        "required": [
+          "raw_counts"
+        ],
+        "properties": {
+          "raw_counts": {
+            "type": "string"
+          },
+          "normalized_expression": {
+            "type": "null"
+          }
+        }
+      }
+    ]
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "allOf": [
+      {
+        "$ref": "schemas/skill-result.schema.json"
+      }
+    ],
+    "properties": {
+      "skill_name": {
+        "const": "rnaseq.heatmap"
+      }
+    },
+    "if": {
+      "properties": {
+        "status": {
+          "const": "succeeded"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "then": {
+      "properties": {
+        "outputs": {
+          "type": "object",
+          "required": [
+            "plot",
+            "matrix",
+            "selected_genes",
+            "normalized_expression",
+            "summary_json"
+          ],
+          "properties": {
+            "plot": {
+              "type": "string",
+              "description": "heatmap.png: non-clustered gene-expression heatmap."
+            },
+            "matrix": {
+              "type": "string",
+              "description": "heatmap_matrix.csv: selected genes with row Z-scores (ddof=1); NOT reusable VST."
+            },
+            "selected_genes": {
+              "type": "string",
+              "description": "selected_genes.csv: selected DEG records in plot order."
+            },
+            "normalized_expression": {
+              "type": "string",
+              "description": "normalized_expression.csv: full supplied or computed VST matrix, reusable for another Heatmap run with matching samples."
+            },
+            "summary_json": {
+              "type": "string",
+              "description": "summary.json: SkillResult 2.0."
+            }
+          }
+        }
+      }
+    }
+  },
+  "requirements": {
+    "python": ">=3.13,<3.14",
+    "executables": [
+      "Rscript"
+    ],
+    "r_packages": [
+      {
+        "name": "DESeq2",
+        "when": "raw_counts is non-null only"
+      }
+    ],
+    "python_packages": [],
+    "filesystem": "Readable local inputs and a new/empty writable output_dir; no network annotation lookup."
+  },
+  "dependencies": {
+    "workflow": {
+      "project_inputs": {
+        "deg_result_file": "deg_result",
+        "metadata": "metadata",
+        "raw_counts": "count_matrix",
+        "normalized_expression": "normalized_expression"
+      },
+      "subset_source_outputs": [],
+      "subset_target_inputs": []
+    },
+    "upstream": [
+      {
+        "skill": "rnaseq.deg",
+        "output": "deg_csv",
+        "input": "deg_result_file",
+        "notes": "External compatible full DEG CSV also accepted."
+      }
+    ],
+    "downstream": [
+      {
+        "skill": "rnaseq.heatmap",
+        "output": "normalized_expression",
+        "input": "normalized_expression",
+        "notes": "Optional reuse in a separate run; not a required self-dependency. Match genes/samples/provenance."
+      }
+    ]
+  },
+  "limitations": [
+    "Default rank: padj ascending, abs(log2FC) descending, then gene_id. Optional abs_log2fc rank reverses the first two priorities; constant genes skipped.",
+    "Optional exact gene_list restricts significant genes before Top N; it does not include nonsignificant genes or infer aliases.",
+    "Supplied expression must truly be VST; file values alone cannot establish its provenance.",
+    "Raw-count mode uses shared DESeq2 blind VST module; PCA currently exports no matrix to reuse.",
+    "No eligible drawable genes raises an error; fewer genes than top_n is a warning, not fabricated rows.",
+    "No clustering; sample order follows expression matrix; scaling is visualization only."
+  ]
+}

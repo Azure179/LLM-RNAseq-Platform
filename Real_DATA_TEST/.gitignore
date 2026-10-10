@@ -1,0 +1,4 @@
+# Keep real biological data and large generated artifacts local by default.
+input/
+results/
+logs/

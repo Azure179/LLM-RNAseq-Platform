@@ -1,0 +1,182 @@
+{
+  "manifest_schema_version": "1.0",
+  "name": "rnaseq.deg",
+  "version": "1.0.0",
+  "description": "Perform two-group differential expression analysis of bulk RNA-seq raw counts using DESeq2.",
+  "category": "differential_expression",
+  "availability": {
+    "status": "implemented",
+    "callable": true
+  },
+  "entry_point": "bulk_rnaseq.skills.deg:run_deg",
+  "use_when": [
+    "Raw gene counts with a defined treatment-versus-control question and at least two independent biological replicates per group."
+  ],
+  "do_not_use_when": [
+    "TPM/FPKM, normalized expression, single-cell counts, or an existing DEG table needing only plotting.",
+    "More than two groups in metadata, paired/batch-adjusted/complex designs, or treatment equal to control."
+  ],
+  "raw_count_requirement": "required",
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "count_matrix_path": {
+        "$ref": "schemas/input-types.schema.json#/$defs/counts"
+      },
+      "metadata_path": {
+        "$ref": "schemas/input-types.schema.json#/$defs/metadata",
+        "description": "UTF-8 CSV requiring sample_id and condition; exactly the requested two groups."
+      },
+      "treatment": {
+        "$ref": "schemas/input-types.schema.json#/$defs/identifier"
+      },
+      "control": {
+        "$ref": "schemas/input-types.schema.json#/$defs/identifier"
+      },
+      "output_dir": {
+        "$ref": "schemas/input-types.schema.json#/$defs/output_dir"
+      },
+      "timeout": {
+        "$ref": "schemas/input-types.schema.json#/$defs/timeout"
+      },
+      "rscript_executable": {
+        "$ref": "schemas/input-types.schema.json#/$defs/rscript"
+      },
+      "alpha": {
+        "$ref": "schemas/input-types.schema.json#/$defs/open_probability"
+      },
+      "lfc_threshold": {
+        "$ref": "schemas/input-types.schema.json#/$defs/lfc"
+      }
+    },
+    "required": [
+      "count_matrix_path",
+      "metadata_path",
+      "treatment",
+      "control",
+      "output_dir"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "allOf": [
+      {
+        "$ref": "schemas/skill-result.schema.json"
+      }
+    ],
+    "properties": {
+      "skill_name": {
+        "const": "rnaseq.deg"
+      }
+    },
+    "if": {
+      "properties": {
+        "status": {
+          "const": "succeeded"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "then": {
+      "properties": {
+        "outputs": {
+          "type": "object",
+          "required": [
+            "deg_csv",
+            "filtered_csv",
+            "summary_json"
+          ],
+          "properties": {
+            "deg_csv": {
+              "type": "string",
+              "description": "deg_results.csv: full non-all-zero-gene DESeq2 results, including legitimate NA statistics; gene_id, baseMean, log2FoldChange, lfcSE, stat, pvalue, padj."
+            },
+            "filtered_csv": {
+              "type": "string",
+              "description": "deg_filtered.csv: genes passing padj < alpha and abs(log2FoldChange) >= lfc_threshold; may contain header only."
+            },
+            "summary_json": {
+              "type": "string",
+              "description": "summary.json: SkillResult 2.0 with legacy aliases."
+            }
+          }
+        }
+      }
+    }
+  },
+  "requirements": {
+    "python": ">=3.13,<3.14",
+    "executables": [
+      "Rscript"
+    ],
+    "r_packages": [
+      {
+        "name": "DESeq2",
+        "when": "always"
+      }
+    ],
+    "python_packages": [],
+    "filesystem": "Readable local inputs and a new/empty writable output_dir; no network annotation lookup."
+  },
+  "dependencies": {
+    "workflow": {
+      "project_inputs": {
+        "count_matrix_path": "count_matrix",
+        "metadata_path": "metadata"
+      },
+      "subset_source_outputs": [
+        "filtered_csv"
+      ],
+      "subset_target_inputs": []
+    },
+    "upstream": [],
+    "downstream": [
+      {
+        "skill": "rnaseq.volcano",
+        "output": "deg_csv",
+        "input": "deg_result_file",
+        "notes": "Full results, not the filtered table, preserve NS counts."
+      },
+      {
+        "skill": "rnaseq.heatmap",
+        "output": "deg_csv",
+        "input": "deg_result_file",
+        "notes": "Also requires matching metadata and VST expression or raw counts."
+      },
+      {
+        "skill": "rnaseq.go",
+        "output": "filtered_csv",
+        "input": "gene_list",
+        "notes": "Requires non-empty query, matching user GO mapping and separate eligible background."
+      },
+      {
+        "skill": "rnaseq.go",
+        "output": "deg_csv",
+        "input": "analysis_genes",
+        "notes": "Background only; excludes NA padj/log2FC. Never treat all full-table genes as selected DEGs."
+      },
+      {
+        "skill": "rnaseq.kegg",
+        "output": "filtered_csv",
+        "input": "gene_list",
+        "notes": "Requires non-empty query, pathway mapping and eligible background."
+      },
+      {
+        "skill": "rnaseq.kegg",
+        "output": "deg_csv",
+        "input": "analysis_genes",
+        "notes": "Background only; excludes NA padj/log2FC."
+      }
+    ]
+  },
+  "limitations": [
+    "Fixed ~condition design; treatment vs control explicitly oriented; no batch correction or complex formula.",
+    "DESeq2 raw-count semantics and biological independence cannot be proven from numeric CSV values.",
+    "R may fail on insufficiently informative data; validation is not a guarantee of estimability.",
+    "No DEGs is a valid succeeded result; downstream empty-query enrichment is not automatically run."
+  ]
+}

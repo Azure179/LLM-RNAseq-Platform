@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bulk-rnaseq-skill"
+version = "0.7.0"
+description = "A staged, contract-first Bulk RNA-seq analysis skill package."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Bulk RNA-seq Skill contributors" },
+]
+dependencies = ["openpyxl>=3.1.5,<4", "jsonschema>=4.23,<5", "httpx>=0.28,<0.29", "python-dotenv>=1.0,<2", "pydantic>=2.10,<3", "streamlit>=1.64,<1.65", "pandas>=2.2,<4", "Pillow>=10.4,<13"]
+
+[project.scripts]
+bulk-rnaseq = "bulk_rnaseq.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"bulk_rnaseq.r_scripts" = ["*.R"]
+"bulk_rnaseq.manifests" = ["*.json", "schemas/*.json"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+markers = ["integration: requires Rscript (DEG/PCA/raw-count Heatmap also require DESeq2); enabled with --run-r", "llm: paid live DeepSeek test, enabled only with --run-llm"]

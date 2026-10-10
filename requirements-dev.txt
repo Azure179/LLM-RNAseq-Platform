@@ -1,0 +1,6 @@
+-r requirements.txt
+
+# Test runner. Phase 1 tests also use unittest-compatible test classes.
+pytest>=8.3,<10
+
+# jsonschema is now a runtime dependency via requirements.txt (Phase 5.3).

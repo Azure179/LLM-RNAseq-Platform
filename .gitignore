@@ -1,0 +1,56 @@
+# Python environments
+.venv/
+venv/
+
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Type checker and linter caches
+.mypy_cache/
+.ruff_cache/
+
+# IDE and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Runtime artifacts
+logs/
+outputs/
+runtime/
+*.log
+
+# Local user analysis projects (not software source or shared test fixtures)
+/workspace/
+/Real_DATA_UI_TEST/
+/Real_DATA_E2E_TEST/
+/Real_DATA_PHASE7_E2E/
+# Retain real-test runners/configuration, never publish input or generated data.
+/Real_DATA_TEST/input/
+/Real_DATA_TEST/results/
+/Real_DATA_TEST/logs/
+# Local historical copies; canonical documentation stays in README/docs.
+/历史版本记录/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# R local state (used in later phases)
+.Rhistory
+.RData
+*.Rhistory
+*.RData
+.Rproj.user/
+renv/library/
+renv/staging/

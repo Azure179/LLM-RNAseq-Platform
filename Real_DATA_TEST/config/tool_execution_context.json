@@ -1,0 +1,17 @@
+{
+  "project_root": ".",
+  "output_root": "Real_DATA_TEST/results/phase_6_3",
+  "bindings": {
+    "rnaseq.deg": {
+      "count_matrix_path": "Real_DATA_TEST/input/count_matrix.csv",
+      "metadata_path": "Real_DATA_TEST/input/metadata.normalized.csv"
+    },
+    "rnaseq.pca": {
+      "count_matrix": "Real_DATA_TEST/input/count_matrix.csv",
+      "metadata": "Real_DATA_TEST/input/metadata.normalized.csv"
+    }
+  },
+  "confirmed_parameters": {"rnaseq.pca": {"group_column": "group"}},
+  "rscript_executable": "Rscript",
+  "timeout_seconds": 3600
+}

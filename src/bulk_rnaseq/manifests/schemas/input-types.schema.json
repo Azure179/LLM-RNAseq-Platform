@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Local filesystem path. Relative paths resolve against the caller working directory; convert to pathlib.Path before Python invocation."
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:.*\\S)?$",
+      "description": "Non-empty identifier with no surrounding whitespace."
+    },
+    "counts": {
+      "$ref": "#/$defs/path",
+      "description": "UTF-8 CSV: gene_id then unique sample columns. Raw, finite, non-negative integer counts <= 2147483647; no missing values. No TPM/FPKM. Samples must have positive library sizes."
+    },
+    "metadata": {
+      "$ref": "#/$defs/path",
+      "description": "UTF-8 CSV with unique sample_id and the specified group column. Sample set must exactly match the expression matrix. Missing values, including extra metadata cells, are rejected."
+    },
+    "deg": {
+      "$ref": "#/$defs/path",
+      "description": "Existing full DEG CSV with gene_id, log2FoldChange, pvalue, padj (extra columns allowed). Unique gene IDs; NA statistics permitted, infinities forbidden. Never use raw counts as DEG results."
+    },
+    "gene_list": {
+      "$ref": "#/$defs/path",
+      "description": "Non-empty gene IDs: one per line or CSV/TSV with gene_id header. An input DEG CSV contributes ALL its IDs, not automatic significance filtering: supply deg_filtered.csv or an explicitly selected list."
+    },
+    "universe": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/path"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Explicit eligible background gene list; includes every query gene. Exactly one non-null universe or analysis_genes is required."
+    },
+    "analysis_genes": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/path"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Eligible analysis gene list or FULL DEG CSV (rows with NA padj/log2FC excluded). Intersected with supplied annotation. Not the entire annotation database. Exactly one non-null universe or analysis_genes."
+    },
+    "open_probability": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "exclusiveMaximum": 1,
+      "default": 0.05
+    },
+    "closed_probability": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.05
+    },
+    "lfc": {
+      "type": "number",
+      "minimum": 0,
+      "default": 1
+    },
+    "timeout": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "default": 600,
+      "description": "Seconds per external R process. Finite; Heatmap may run two processes."
+    },
+    "rscript": {
+      "type": "string",
+      "minLength": 1,
+      "default": "Rscript",
+      "description": "Trusted executable name/path configured by the host. Not an arbitrary command. A future LLM adapter should not expose this host setting as user-controlled tool input."
+    },
+    "output_dir": {
+      "$ref": "#/$defs/path",
+      "description": "New or empty writable output directory; existing results are never overwritten."
+    },
+    "mapping_sheet": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "pattern": "\\S",
+      "default": null,
+      "description": "Required to disambiguate an XLSX workbook with multiple sheets; null for text input or a single sheet."
+    }
+  }
+}

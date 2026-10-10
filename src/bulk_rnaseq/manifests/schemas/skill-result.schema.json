@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SkillResult 2.0 (canonical fields plus optional legacy aliases)",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "status",
+    "skill_name",
+    "run_id",
+    "inputs",
+    "outputs",
+    "summary",
+    "warnings",
+    "metadata",
+    "error_code",
+    "message",
+    "details"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "2.0"
+    },
+    "status": {
+      "enum": [
+        "succeeded",
+        "failed"
+      ]
+    },
+    "skill_name": {
+      "type": "string",
+      "pattern": "^rnaseq\\..+$"
+    },
+    "run_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "inputs": {
+      "type": "object"
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "summary": {
+      "type": "object"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "details"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "message": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "details": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "error_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "details": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "succeeded"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "run_id": {
+            "type": "string"
+          },
+          "error_code": {
+            "type": "null"
+          },
+          "message": {
+            "type": "null"
+          },
+          "details": {
+            "maxProperties": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "error_code": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "message": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "outputs": {
+            "maxProperties": 0
+          },
+          "summary": {
+            "maxProperties": 0
+          }
+        }
+      }
+    }
+  ]
+}
