@@ -2,11 +2,11 @@
 
 一个用自然语言组织 Bulk RNA-seq 分析的本地工作区。
 
-我有生物信息学背景，熟悉 RNA-seq 分析、R 和 Linux。做这个项目，是想把平时使用的分析脚本整理成一套接口清楚、结果可追溯、能够测试的软件，同时探索大语言模型在生信分析中适合承担什么工作。
+做这个项目，是想把平时使用的分析脚本整理成一套接口清楚、结果可追溯、能够测试的软件，同时探索大语言模型在生信分析中适合承担什么工作。
 
-我的基本思路是：**让模型理解需求，让分析程序负责计算，让本地代码检查两者之间的交接。** DeepSeek 负责选择任务、提取参数和解释已得到的结果；DESeq2 和固定的 R/Python 程序负责统计分析。模型不能自行生成基因列表、修改统计结果或执行任意代码。
+基本思路是：**让模型理解需求，让分析程序负责计算，让本地代码检查两者之间的交接。** DeepSeek 负责选择任务、提取参数和解释已得到的结果；DESeq2 和固定的 R/Python 程序负责统计分析。模型不能自行生成基因列表、修改统计结果或执行任意代码。
 
-这也是我的工程化学习和作品集项目。除了分析能否跑通，我更关心输入错误能否被及时发现、一个结果能否追溯到它使用的数据，以及程序在失败后是否仍然可信。
+这也是工程化学习和作品集项目。除了分析能否跑通，我更关心输入错误能否被及时发现、一个结果能否追溯到它使用的数据，以及程序在失败后是否仍然可信。
 
 ## 项目状态
 
@@ -15,7 +15,7 @@ Current milestone: Phase 7.8 Preview
 Status: Active Development / NOT READY for stable release
 ```
 
-目前提供 [v0.7.0-preview](https://github.com/Azure179/LLM-RNAseq-Platform/releases/tag/v0.7.0-preview) 作为公开预览，保留下一轮修复前的项目状态。它适合了解设计、运行示例和参与测试，还不是可以直接用于正式科研交付的稳定版本。
+目前提供 [v0.7.0-preview](https://github.com/Azure179/LLM-RNAseq-Platform/releases/tag/v0.7.0-preview) 作为公开预览，保留下一轮修复前的项目状态。它适合了解设计、运行示例和参与测试，还不是可以直接用于正式使用的稳定版本。
 
 **当前主要问题：** Workflow 中生成的 DEG 结果，还不能可靠地被后续聊天请求复用于新的 Volcano、GO 或 KEGG 分析。已有结果可能没有正确进入下一次请求的执行上下文，从而被提示缺少输入。
 
@@ -40,7 +40,7 @@ GO/KEGG 面向自定义注释，也考虑了非模式物种的使用场景，不
 
 ### 自然语言与工作流
 
-- 通过真实 DeepSeek API 解析需求，支持 Structured Intent、Tool Calling 和多步骤 Workflow 规划。
+- 通过 DeepSeek API 解析需求，支持 Structured Intent、Tool Calling 和多步骤 Workflow 规划。
 - 使用已有 Skill Schema 和 Manifest 生成工具描述，通过 Registry 统一调用分析功能。
 - 在本地检查业务参数、输入文件、输出绑定、依赖关系和 DAG，再按拓扑顺序串行执行。
 - 上游失败时跳过依赖它的步骤；一个分支失败时，不阻止其他独立分支继续运行。
@@ -157,7 +157,7 @@ DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-flash
 ```
 
-在 `DEEPSEEK_API_KEY` 后填入自己的 key。模型名可按账户实际可用模型调整，其他选项见 [.env.example](.env.example) 和 [客户端说明](docs/phase-6-0-deepseek-client.md)。不要把真实 key 放进源码、截图或聊天内容；`.env` 已被 Git 忽略。
+在 `DEEPSEEK_API_KEY` 后填入自己的 key。模型名可按账户实际可用模型调整，其他选项见 [.env.example](.env.example) 和 [客户端说明](docs/phase-6-0-deepseek-client.md)。`.env` 已被 Git 忽略。
 
 ### 打开工作区
 
@@ -171,7 +171,7 @@ DEEPSEEK_MODEL=deepseek-flash
 
 默认地址是 `http://127.0.0.1:8501`。双击启动器遇到端口占用时会尝试其他本地端口，以启动窗口显示为准。这是本机应用，不是持续在线的网站；停止服务后，页面就无法访问。
 
-## 带入自己的数据
+## 导入自己的数据
 
 1. 在左侧创建项目，进入 **Files**。
 2. 导入 gene-level raw count matrix。界面会识别支持的分隔符和表头别名，保存原文件，再生成规范分析副本。
@@ -264,7 +264,7 @@ PCA 对 VST 后的变异基因做中心化分析。Heatmap 从显著 DEG 中选�
 
 ## 测试与真实数据验证
 
-我把测试分成离线测试、真实 R 测试和真实 DeepSeek 测试，避免日常开发自动消耗 API 额度。
+测试分成离线测试、真实 R 测试和真实 DeepSeek 测试。
 
 ```powershell
 # 默认测试：不调用真实 API 或 R
@@ -295,38 +295,15 @@ Phase 7.8 的验证记录：
 ## 数据与隐私
 
 原始输入、分析产物和项目历史默认保存在本地。使用聊天时，请求和精简分析上下文会发送给 DeepSeek，因此这不是完全离线的系统；不适合未经授权将敏感研究信息发送到外部服务的场景。
-
 公开仓库不包含真实科研矩阵、注释大表、用户 workspace、运行日志或真实 API key。`Real_DATA_TEST/` 只保留测试脚本、相对路径配置和文字报告，真实输入与结果未公开。报告中的本地 artifact 路径不代表仓库提供了这些文件。
-
-## 代码从哪里看起
-
-```text
-app/                         Streamlit 界面和本地启动入口
-src/bulk_rnaseq/
-├── skills/                  六类分析 Skill
-├── r_scripts/               固定 R 分析与绘图脚本
-├── manifests/               能力描述和共享 Schema
-├── llm/                     DeepSeek 客户端、意图、工具与结果总结
-├── workflow/                计划、校验、依赖解析、执行和工作流总结
-├── customization/           白名单参数定制与注释筛选
-└── workspace/               项目、导入、聊天与结果管理
-tests/                       单元测试、R 集成和显式付费 API 测试
-examples/                    小型合成输入及调用示例
-Real_DATA_TEST/              真实数据验证框架，不含原始数据
-docs/                        各模块设计和阶段记录
-PHASE7_E2E_REPORT.md         当前完整验收结论
-```
-
-如果想了解工程设计，可以从 [Manifest](docs/phase-5-2-manifests.md)、[Workflow Model](docs/phase-7-1-workflow-model.md)、[Validator](docs/phase-7-3-plan-validator.md)、[Executor](docs/phase-7-4-workflow-executor.md)、[受控定制](docs/phase-7-6-controlled-customization.md) 看起。`docs/` 中保留了开发时的阶段记录，部分描述反映的是当时状态；当前功能和限制以本页及最新 E2E 报告为准。
 
 ## 还需要完善的地方
 
-我会先修复 Result Reuse & Lineage，再继续扩展功能。目前需要明确的限制包括：
+优先修复 Result Reuse & Lineage，再继续扩展功能。目前需要明确的限制包括：
 
 - 历史 Workflow DEG 在后续聊天中的复用尚不可靠；不能简单取“最新结果”来绕过比较方向和来源确认。
 - 注释筛选是文字匹配，不是功能验证。中文关键词不一定匹配英文注释，精确 gene ID 也不等于 gene symbol。
 - 直接 DEG Skill 仍是简单两组设计，不支持 batch correction 或复杂 design formula；Workflow 层可为明确的两组比较派生输入快照。
-- GSEA 只有预留描述，没有可执行实现。
 - Workflow 当前串行执行；没有自动重试、自主 Agent 或任意 Python/R 代码生成执行。
 - 当前是本地 Streamlit MVP，没有 FastAPI、Docker 部署、多用户或身份认证。
 - 结果摘要的事实校验是有限约束，不等同于全面生物学审查。正式研究仍需要检查输入、统计假设、注释来源和完整结果。
