@@ -1,0 +1,69 @@
+# Local, trusted-user deployment. Both entry points call the same Python backend.
+# .env is used for interpolation only: it is never mounted or copied into the image.
+name: rnaseq-local
+
+x-runtime: &runtime
+  image: ${RNASEQ_IMAGE:-bulk-rnaseq:local}
+  build:
+    context: .
+    dockerfile: Dockerfile
+  user: "10001:10001"
+  init: true
+  restart: unless-stopped
+  stop_grace_period: 30s
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  environment: &environment
+    RNASEQ_WORKSPACE_ROOT: /workspace
+    RNASEQ_RSCRIPT: Rscript
+    RNASEQ_LOG_LEVEL: ${RNASEQ_LOG_LEVEL:-INFO}
+    DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+    DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+    DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
+    DEEPSEEK_TIMEOUT_SECONDS: ${DEEPSEEK_TIMEOUT_SECONDS:-30}
+    DEEPSEEK_MAX_TOKENS: ${DEEPSEEK_MAX_TOKENS:-64}
+  volumes:
+    - type: volume
+      source: workspace
+      target: /workspace
+  logging:
+    driver: local
+    options:
+      max-size: 10m
+      max-file: "3"
+  networks: [backend]
+
+services:
+  api:
+    <<: *runtime
+    command: [python, -m, uvicorn, bulk_rnaseq.api.main:app, --host, 0.0.0.0, --port, "8000"]
+    ports:
+      - "127.0.0.1:${RNASEQ_API_PUBLISHED_PORT:-8000}:8000"
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; [urllib.request.urlopen('http://127.0.0.1:8000'+p, timeout=3).close() for p in ('/health', '/ready')]"]
+      interval: 10s
+      timeout: 8s
+      start_period: 30s
+      retries: 3
+  streamlit:
+    <<: *runtime
+    command: [python, -m, streamlit, run, app/main.py, --server.address=0.0.0.0, --server.port=8501, --server.headless=true]
+    environment:
+      <<: *environment
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+      STREAMLIT_CLIENT_SHOW_ERROR_DETAILS: "none"
+    ports:
+      - "127.0.0.1:${RNASEQ_UI_PUBLISHED_PORT:-8501}:8501"
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+volumes:
+  workspace:
+    name: ${RNASEQ_VOLUME_NAME:-rnaseq-workspace}
+networks:
+  backend:
+    driver: bridge

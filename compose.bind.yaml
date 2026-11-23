@@ -1,0 +1,17 @@
+# Override only /workspace. Switching mounts does NOT migrate data.
+# Create the host directory first; do not let Docker create a misspelled path.
+services:
+  api:
+    volumes:
+      - type: bind
+        source: ${RNASEQ_WORKSPACE_HOST:?Set RNASEQ_WORKSPACE_HOST to an existing dedicated directory}
+        target: /workspace
+        bind:
+          create_host_path: false
+  streamlit:
+    volumes:
+      - type: bind
+        source: ${RNASEQ_WORKSPACE_HOST:?Set RNASEQ_WORKSPACE_HOST to an existing dedicated directory}
+        target: /workspace
+        bind:
+          create_host_path: false

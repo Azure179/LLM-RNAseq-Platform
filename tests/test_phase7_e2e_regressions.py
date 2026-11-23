@@ -31,6 +31,16 @@ def test_sort_recent_filtered_result_never_expands_back_to_original_deg(host, tm
     data = ResultManager(controller.manager, "First").download(sorted_result.run_id, "filtered_table")[1]
     assert [row["gene_id"] for row in csv.DictReader(StringIO(data.decode()))] == expected
     assert calls == before
+    # A third operation must prefer the last produced table, not offer both
+    # that table and its same-kind parent as competing 'just now' sources.
+    answers.extend([{"request_type": "customization", "target_skill": "rnaseq.deg", "source_reference": "recent",
+                     "source_kind": "filtered_deg"},
+        {"mode": "annotation_filter", "target_skill": "rnaseq.deg", "parameters": {"order_by": "log2fc", "descending": True}}])
+    repeated = controller.submit("First", "再次排序刚才筛选的基因", str(uuid4()))
+    assert repeated.status == "succeeded", repeated
+    assert repeated.source_run_id == sorted_result.run_id
+    assert repeated.summary["n_matched_genes"] == len(expected)
+    assert calls == before
 
 
 def test_filtered_source_missing_does_not_fall_back_to_deg(host):

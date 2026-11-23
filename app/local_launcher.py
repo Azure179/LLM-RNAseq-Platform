@@ -2,7 +2,6 @@
 
 import argparse
 import logging
-import os
 from pathlib import Path
 import sys
 import time
@@ -66,7 +65,7 @@ class Launcher:
         self.window.after(500, self.poll)
 
     def close(self) -> None:
-        workspace = Path(os.environ.get("RNASEQ_WORKSPACE_ROOT", str(ROOT / "workspace")))
+        workspace = self.server.config.workspace_root
         try:
             busy = any(workspace.glob("*/runtime/chat.lock"))
         except OSError:

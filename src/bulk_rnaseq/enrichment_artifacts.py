@@ -45,8 +45,9 @@ def verify_enrichment_outputs(stage: Path, prepared: EnrichmentInputs, terms: di
                     csv.field_size_limit(previous)
 
         rows = read(f"{prefix}_all_results.csv")
-        if len(rows) != len(prepared.term_genes) or {r[id_column] for r in rows} != set(prepared.term_genes):
-            raise ValueError("Tested terms differ from effective universe annotations")
+        tested = {term for term, members in prepared.term_genes.items() if members & prepared.query}
+        if len(rows) != len(tested) or {r[id_column] for r in rows} != tested:
+            raise ValueError("Tested terms differ from clusterProfiler positive-overlap family")
         n, N = len(prepared.query), len(prepared.universe)
         for row in rows:
             members = prepared.term_genes[row[id_column]]
@@ -76,8 +77,11 @@ def verify_enrichment_outputs(stage: Path, prepared: EnrichmentInputs, terms: di
             check_png(stage / name)
         fields = dict(line.split("=", 1) for line in stdout.splitlines() if "=" in line)
         if (not fields["R_VERSION"].strip() or not fields["STATS_VERSION"].strip()
+                or not fields["CLUSTERPROFILER_VERSION"].strip() or not fields["ENRICHIT_VERSION"].strip()
                 or int(fields["N_TERMS_TESTED"]) != len(rows) or int(fields["N_ENRICHED"]) != len(enriched)):
             raise ValueError("R provenance disagrees with artifacts")
     except (OSError, UnicodeError, csv.Error, ValueError, KeyError, TypeError) as cause:
         raise SkillError("OUTPUT_INVALID", "Enrichment artifact verification failed.", details={"reason": str(cause)}) from cause
-    return len(enriched), {"r_version": fields["R_VERSION"], "stats_version": fields["STATS_VERSION"]}
+    return len(enriched), {"r_version": fields["R_VERSION"], "stats_version": fields["STATS_VERSION"],
+                           "clusterProfiler_version": fields["CLUSTERPROFILER_VERSION"],
+                           "enrichit_version": fields["ENRICHIT_VERSION"]}

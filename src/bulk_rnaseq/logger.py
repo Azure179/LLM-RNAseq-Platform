@@ -6,9 +6,11 @@ import logging
 LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 
 
-def create_logger(name: str, level: str = "INFO") -> logging.Logger:
+def create_logger(name: str, level: str | None = None) -> logging.Logger:
     """Create an idempotent console logger with a readable format."""
 
+    from bulk_rnaseq.config import load_runtime_config
+    level = level or load_runtime_config().log_level
     logger = logging.getLogger(name)
 
     try:

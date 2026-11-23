@@ -1,7 +1,7 @@
 {
   "manifest_schema_version": "1.0",
   "name": "rnaseq.go",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Perform offline GO over-representation analysis using a selected gene list, user mapping and explicit eligible background.",
   "category": "over_representation_analysis",
   "availability": {
@@ -144,7 +144,7 @@
             },
             "all_results": {
               "type": "string",
-              "description": "go_all_results.csv: full tested family including zero-overlap terms."
+              "description": "go_all_results.csv: native clusterProfiler tested family with positive query overlap."
             },
             "dotplot": {
               "type": "string",
@@ -182,8 +182,8 @@
     ],
     "r_packages": [
       {
-        "name": "stats",
-        "when": "always; bundled with base R; fisher.test(alternative='greater') and p.adjust(method='BH')"
+        "name": "clusterProfiler",
+        "when": "always; verified runtime 4.20.2 with enrichit 0.2.6, R 4.6 / Bioconductor 3.23; enricher with custom TERM2GENE/TERM2NAME"
       }
     ],
     "python_packages": [
@@ -224,12 +224,13 @@
     "downstream": []
   },
   "limitations": [
-    "Uses base-R Fisher exact test + BH, not clusterProfiler or an organism annotation package.",
+    "Uses clusterProfiler::enricher with custom TERM2GENE/TERM2NAME and BH; no organism database or online lookup.",
     "Effective background = declared eligible genes intersect supplied mapping; no automatic background fallback.",
     "No mapped query is an error. Zero significant terms is succeeded with warnings and empty-result figures.",
     "No automatic gene ID conversion: eggNOG query IDs must already match query/background, or use an explicit audited preprocessing crosswalk.",
     "CSV/TSV and XLSX mappings supported, not binary legacy .xls; multiple XLSX sheets require mapping_sheet.",
-    "Significant means pvalue <= threshold AND padj <= threshold AND overlap > 0; tested family includes zero-overlap terms.",
+    "Significant means pvalue <= threshold AND padj <= threshold AND overlap > 0; native BH family contains positive-overlap terms only (changed from pre-Phase-9.2).",
+    "Explicit minGSSize=1, maxGSSize=mapped universe size, pvalueCutoff=1 and qvalueCutoff=1; adapt unfiltered result slot then apply project thresholds; no qvalue filter.",
     "GO ID syntax validation is not ontology-database existence validation; no ancestor propagation.",
     "BP/MF/CC requires ontology for every mapped term; ordinary eggNOG GOs lack this field, so use ALL or an externally annotated custom mapping.",
     "eggNOG protein Description is not a GO term name; missing term names remain GO IDs."

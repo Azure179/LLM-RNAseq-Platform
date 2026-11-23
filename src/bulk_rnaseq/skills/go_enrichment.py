@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from bulk_rnaseq import __version__
+from bulk_rnaseq.enrichment_engine import engine_provenance
 from bulk_rnaseq.exceptions import SkillError
 from bulk_rnaseq.go_artifacts import GO_FILES, verify_go_outputs
 from bulk_rnaseq.go_data import prepare_go, read_gene_list, validate_go_parameters
@@ -102,16 +103,19 @@ def run_go_enrichment(
                        "inputs": {key: str(path) for key, path in inputs.items()},
                        "parameters": {"pvalue_threshold": pvalue_threshold, "padj_threshold": padj_threshold,
                                       "ontology": ontology, "mapping_sheet": mapping_sheet, "timeout": timeout},
-                       "methods": {"test": "R stats::fisher.test", "alternative": "greater", "adjustment": "BH",
+                       "methods": {"test": "clusterProfiler::enricher", "alternative": "greater", "adjustment": "BH",
                                    "background_source": origin, "background_rule": "eligible input genes intersect supplied ontology GO mapping",
                                    "annotation_source": "user_mapping", "mapping_format": mapping.format,
                                    "threshold_rule": "pvalue <= threshold AND padj <= threshold AND overlap > 0",
-                                   "multiple_testing_family": "all terms in effective universe, including zero-overlap terms",
-                                   "go_ancestor_propagation": False, "term_size_filter": None, "plot_top_n": 20},
+                                   "multiple_testing_family": "mapped terms with positive query overlap",
+                                   "go_ancestor_propagation": False,
+                                   "term_size_filter": {"min": 1, "max": len(prepared.universe)},
+                                   "qvalue_filter": "not applied", "plot_top_n": 20},
                        "metrics": {**prepared.metrics, "n_enriched": n_enriched, "n_mapping_rows": mapping.n_rows,
                                    "n_mapping_pairs": len(mapping.pairs), "n_background_rows_excluded": background_dropped},
                        "warnings": warnings,
-                       "provenance": {"package_version": __version__, **versions, "input_sha256": input_hashes,
+                       "provenance": {"package_version": __version__, **engine_provenance(prepared),
+                                      **versions, "input_sha256": input_hashes,
                                       "r_scripts_sha256": {script.name: sha256(script), "enrichment_common.R": sha256(scripts / "enrichment_common.R")},
                                       "artifact_sha256": {name: sha256(stage / name) for name in GO_FILES}}}
             for name in GO_FILES:

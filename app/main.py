@@ -1,8 +1,6 @@
 """Start with: streamlit run app/main.py (from the repository root)."""
 
 from pathlib import Path
-import logging
-import os
 import sys
 
 # Streamlit executes this entry as a script. Keep application imports independent
@@ -19,12 +17,13 @@ from app.components.sidebar import render_sidebar
 from app.state import TABS, clear_current_project, initialize_state, refresh_project_state, widget_key
 from app.views import assistant, files, project, results
 from bulk_rnaseq.workspace import FileImportService, ProjectError, ProjectManager
+from bulk_rnaseq.config import load_runtime_config
 
 
 def main() -> None:
     st.set_page_config(page_title="RNA-seq Workspace", page_icon="🧬", layout="wide", initial_sidebar_state="expanded")
     # Host-only optional setting, never a user-supplied path or an LLM parameter.
-    root = Path(os.environ.get("RNASEQ_WORKSPACE_ROOT", str(REPOSITORY_ROOT / "workspace")))
+    root = load_runtime_config().workspace_root
     service = FileImportService(ProjectManager(root))
     state = initialize_state(st.session_state)
     if state.current_project:
@@ -65,5 +64,4 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        logging.getLogger(__name__).exception("Workspace UI failure")
         show_user_error(error)

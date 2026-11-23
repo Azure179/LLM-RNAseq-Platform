@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from bulk_rnaseq.llm.config import DeepSeekConfig
+from bulk_rnaseq.llm.tls import deepseek_tls_context
 from bulk_rnaseq.llm.exceptions import DeepSeekError
 from bulk_rnaseq.llm.tool_adapter import validate_tool_definitions
 
@@ -129,7 +130,7 @@ class DeepSeekClient:
         LOGGER.info("DeepSeek request started; max_tokens=%d; automatic retries=0", limit)
         try:
             with httpx.Client(transport=self._transport, timeout=self._config.timeout_seconds,
-                              follow_redirects=False, trust_env=False) as client:
+                              verify=deepseek_tls_context(), follow_redirects=False, trust_env=False) as client:
                 response = client.post(self._config.base_url + "/chat/completions", json=payload,
                                        headers={"Authorization": "Bearer " + self._config.api_key,
                                                 "Content-Type": "application/json"})
@@ -137,6 +138,8 @@ class DeepSeekClient:
             raise DeepSeekError("LLM_TIMEOUT", "DeepSeek request timed out; no retry was attempted.") from None
         except httpx.RequestError:
             raise DeepSeekError("LLM_NETWORK_ERROR", "Unable to reach DeepSeek; check network access.") from None
+        except OSError:
+            raise DeepSeekError("LLM_CONFIG_ERROR", "Unable to initialize the verified TLS connection.") from None
         latency = round(perf_counter() - started, 6)
         LOGGER.info("DeepSeek response received: http_status=%d latency_seconds=%.3f", response.status_code, latency)
         if not 200 <= response.status_code < 300:

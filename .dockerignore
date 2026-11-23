@@ -1,0 +1,24 @@
+# Deny by default. Tests, examples, private data, environments and .git
+# are not sent to the daemon at all. Runtime smoke inputs are mounted read-only.
+**
+!Dockerfile
+!.dockerignore
+!pyproject.toml
+!README.md
+!LICENSE
+!src/
+!src/**
+!app/
+!app/**
+!container/
+!container/**
+# Defense in depth inside permitted source directories.
+**/__pycache__/
+**/*.egg-info/
+**/*.py[cod]
+**/.env
+**/.env.*
+**/*.log
+**/secrets.toml
+**/.Rhistory
+**/.RData

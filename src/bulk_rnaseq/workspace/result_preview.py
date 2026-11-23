@@ -68,7 +68,7 @@ def validate_image(data: bytes) -> None:
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(BytesIO(data)) as image:
+            with Image.open(BytesIO(data), formats=("PNG", "JPEG")) as image:
                 if image.format not in {"PNG", "JPEG"} or image.width * image.height > 40_000_000:
                     raise ValueError("Unsupported dimensions or format")
                 image.verify()

@@ -132,7 +132,9 @@ def test_success_context_progress_and_at_most_once(chat):
     assert context.project_root == controller.manager.root / "First"
     assert context.bindings["rnaseq.pca"]["count_matrix"].startswith("input/")
     assert all(item["path"].startswith("results/") for item in result.artifacts)
-    assert controller.submit("First", "different text", request_id) == result
+    assert controller.submit("First", "fixture PCA", request_id) == result
+    assert controller.submit("First", "different text", request_id).error_code == "REQUEST_ID_CONFLICT"
+    assert controller.submit("First", "fixture PCA", request_id) == result
     assert runner.run.call_count == factory.call_count == 1
 
 
@@ -172,16 +174,17 @@ def test_summary_failure_keeps_outputs_and_does_not_offer_rerun(chat):
     assert result.status == "failed" and result.artifacts and "分析文件已生成" in result.assistant_message
 
 
-def test_upstream_from_actual_output_record_invalidated_on_replace(chat):
+def test_context_never_implicitly_binds_last_deg_before_or_after_replace(chat):
     controller, runner, _ = chat
     mock_success(runner, "rnaseq.deg")
     result = controller.submit("First", "fixture DEG", str(uuid4()))
     assert result.status == "succeeded", result
     store = ChatStore(controller.manager, "First")
     context = controller._context("First", store)
-    assert context.bindings["rnaseq.volcano"]["deg_result_file"].endswith("deg_csv.csv")
-    assert context.bindings["rnaseq.go"]["gene_list"].endswith("filtered_csv.csv")
-    assert context.bindings["rnaseq.kegg"]["analysis_genes"].endswith("deg_csv.csv")
+    # Phase 7.8.1 replaces the implicit last-DEG cache with explicit ResultResolver selection.
+    assert "deg_result_file" not in context.bindings["rnaseq.volcano"]
+    assert "gene_list" not in context.bindings["rnaseq.go"]
+    assert "analysis_genes" not in context.bindings["rnaseq.kegg"]
     filename, content = DATA["count_matrix"]
     import_upload(controller.service, "First", filename, BytesIO(content), "count_matrix", replace=True)
     assert "deg_result_file" not in controller._context("First", store).bindings["rnaseq.volcano"]

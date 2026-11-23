@@ -1,0 +1,453 @@
+{
+  "comparison": {
+    "alpha": 0.05,
+    "control": "control",
+    "lfc_threshold": 1,
+    "treatment": "treatment"
+  },
+  "coordinates": {
+    "control_1": {
+      "PC1": -4.82250352373926,
+      "PC2": 0.0219853614989836
+    },
+    "control_2": {
+      "PC1": -4.44387199104832,
+      "PC2": -0.653624961314811
+    },
+    "control_3": {
+      "PC1": -4.99672096815941,
+      "PC2": 0.606450493559253
+    },
+    "treatment_1": {
+      "PC1": 4.7576580796311,
+      "PC2": 0.0591126449734786
+    },
+    "treatment_2": {
+      "PC1": 4.6609725939399,
+      "PC2": -0.625453058788212
+    },
+    "treatment_3": {
+      "PC1": 4.844465809376,
+      "PC2": 0.591529520071308
+    }
+  },
+  "deg_counts": {
+    "control_samples": 3,
+    "downregulated_genes": 9,
+    "genes_analyzed": 30,
+    "genes_input": 30,
+    "genes_with_pvalue": 30,
+    "padj_na": 0,
+    "padj_significant_genes": 18,
+    "samples_input": 6,
+    "significant_genes": 18,
+    "treatment_samples": 3,
+    "upregulated_genes": 9
+  },
+  "deg_table": {
+    "gene_001": {
+      "log2FoldChange": 2.93052127201735,
+      "padj": 1.61396953029892e-107,
+      "pvalue": 1.07597968686594e-108
+    },
+    "gene_002": {
+      "log2FoldChange": -3.02954933516726,
+      "padj": 1.32384014285342e-89,
+      "pvalue": 1.76512019047122e-90
+    },
+    "gene_003": {
+      "log2FoldChange": 2.50222651022729,
+      "padj": 1.22058439944076e-24,
+      "pvalue": 6.10292199720379e-25
+    },
+    "gene_004": {
+      "log2FoldChange": -2.25625048623855,
+      "padj": 1.44665732285402e-128,
+      "pvalue": 4.82219107618008e-130
+    },
+    "gene_005": {
+      "log2FoldChange": 0.022307352298034,
+      "padj": 0.989427294185702,
+      "pvalue": 0.907152850848977
+    },
+    "gene_006": {
+      "log2FoldChange": -0.0179346769362128,
+      "padj": 0.989427294185702,
+      "pvalue": 0.882481273428499
+    },
+    "gene_007": {
+      "log2FoldChange": 2.30203399688152,
+      "padj": 3.52548594883292e-28,
+      "pvalue": 1.5277105778276e-28
+    },
+    "gene_008": {
+      "log2FoldChange": -2.13554292381039,
+      "padj": 2.07030807078555e-83,
+      "pvalue": 4.14061614157111e-84
+    },
+    "gene_009": {
+      "log2FoldChange": 0.0591511917224747,
+      "padj": 0.989427294185702,
+      "pvalue": 0.783631645358364
+    },
+    "gene_010": {
+      "log2FoldChange": 0.00226813284997729,
+      "padj": 0.989427294185702,
+      "pvalue": 0.983477902610442
+    },
+    "gene_011": {
+      "log2FoldChange": 2.54733701426726,
+      "padj": 1.18470277650082e-17,
+      "pvalue": 6.71331573350463e-18
+    },
+    "gene_012": {
+      "log2FoldChange": -2.11949881802975,
+      "padj": 1.10600709689423e-83,
+      "pvalue": 1.84334516149039e-84
+    },
+    "gene_013": {
+      "log2FoldChange": 0.0215573244438852,
+      "padj": 0.989427294185702,
+      "pvalue": 0.892640883746407
+    },
+    "gene_014": {
+      "log2FoldChange": 2.36567734125229,
+      "padj": 2.75858718332932e-41,
+      "pvalue": 1.10343487333173e-41
+    },
+    "gene_015": {
+      "log2FoldChange": -2.10782155482752,
+      "padj": 7.42026377918615e-56,
+      "pvalue": 2.22607913375585e-56
+    },
+    "gene_016": {
+      "log2FoldChange": 0.0217796437260958,
+      "padj": 0.989427294185702,
+      "pvalue": 0.875614526230565
+    },
+    "gene_017": {
+      "log2FoldChange": 2.29821055668647,
+      "padj": 3.89030439364262e-26,
+      "pvalue": 1.81547538369989e-26
+    },
+    "gene_018": {
+      "log2FoldChange": -2.18886891259319,
+      "padj": 1.65961404119827e-72,
+      "pvalue": 3.87243276279596e-73
+    },
+    "gene_019": {
+      "log2FoldChange": 0.0348092928261325,
+      "padj": 0.989427294185702,
+      "pvalue": 0.846944181786846
+    },
+    "gene_020": {
+      "log2FoldChange": -0.00395843554892646,
+      "padj": 0.989427294185702,
+      "pvalue": 0.973307855212635
+    },
+    "gene_021": {
+      "log2FoldChange": 2.53070268277333,
+      "padj": 2.7799606255714e-14,
+      "pvalue": 1.66797637534284e-14
+    },
+    "gene_022": {
+      "log2FoldChange": -2.16025905110197,
+      "padj": 2.5956869501769e-62,
+      "pvalue": 6.92183186713841e-63
+    },
+    "gene_023": {
+      "log2FoldChange": 0.0160763521985018,
+      "padj": 0.989427294185702,
+      "pvalue": 0.912452807844469
+    },
+    "gene_024": {
+      "log2FoldChange": 2.46808804259384,
+      "padj": 1.72096071634341e-49,
+      "pvalue": 5.7365357211447e-50
+    },
+    "gene_025": {
+      "log2FoldChange": -2.08366033682577,
+      "padj": 3.84896960919591e-46,
+      "pvalue": 1.41128885670517e-46
+    },
+    "gene_026": {
+      "log2FoldChange": 0.00793590497704279,
+      "padj": 0.989427294185702,
+      "pvalue": 0.953180055396577
+    },
+    "gene_027": {
+      "log2FoldChange": 2.12989876550076,
+      "padj": 1.03986673704255e-18,
+      "pvalue": 5.5459559308936e-19
+    },
+    "gene_028": {
+      "log2FoldChange": -2.07445327621145,
+      "padj": 2.0430475544799e-90,
+      "pvalue": 2.0430475544799e-91
+    },
+    "gene_029": {
+      "log2FoldChange": 0.0288471283152146,
+      "padj": 0.989427294185702,
+      "pvalue": 0.887240712638053
+    },
+    "gene_030": {
+      "log2FoldChange": -0.00147866771327051,
+      "padj": 0.989427294185702,
+      "pvalue": 0.989427294185702
+    }
+  },
+  "enrichment": {
+    "go_all": {
+      "metrics": {
+        "n_background_input": 30,
+        "n_background_rows_excluded": 0,
+        "n_background_unmapped": 0,
+        "n_enriched": 0,
+        "n_mapping_pairs": 43,
+        "n_mapping_rows": 43,
+        "n_query_input": 18,
+        "n_query_mapped": 18,
+        "n_query_unmapped": 0,
+        "n_terms_annotated": 3,
+        "n_terms_tested": 3,
+        "n_universe": 30
+      },
+      "terms": {
+        "GO:0006281": {
+          "overlap_count": 6.0,
+          "padj": 0.1875862068965515,
+          "pvalue": 0.12505747126436767
+        },
+        "GO:0006950": {
+          "overlap_count": 6.0,
+          "padj": 0.09379310344827592,
+          "pvalue": 0.03126436781609197
+        },
+        "GO:0008150": {
+          "overlap_count": 18.0,
+          "padj": 1.0,
+          "pvalue": 1.0
+        }
+      }
+    },
+    "go_down": {
+      "metrics": {
+        "n_background_input": 30,
+        "n_background_rows_excluded": 0,
+        "n_background_unmapped": 0,
+        "n_enriched": 1,
+        "n_mapping_pairs": 43,
+        "n_mapping_rows": 43,
+        "n_query_input": 9,
+        "n_query_mapped": 9,
+        "n_query_unmapped": 0,
+        "n_terms_annotated": 3,
+        "n_terms_tested": 3,
+        "n_universe": 30
+      },
+      "terms": {
+        "GO:0006281": {
+          "overlap_count": 5.0,
+          "padj": 0.04164456233421758,
+          "pvalue": 0.013881520778072528
+        },
+        "GO:0006950": {
+          "overlap_count": 4.0,
+          "padj": 0.07374005305039791,
+          "pvalue": 0.04916003536693194
+        },
+        "GO:0008150": {
+          "overlap_count": 9.0,
+          "padj": 1.0,
+          "pvalue": 1.0
+        }
+      }
+    },
+    "go_up": {
+      "metrics": {
+        "n_background_input": 30,
+        "n_background_rows_excluded": 0,
+        "n_background_unmapped": 0,
+        "n_enriched": 0,
+        "n_mapping_pairs": 43,
+        "n_mapping_rows": 43,
+        "n_query_input": 9,
+        "n_query_mapped": 9,
+        "n_query_unmapped": 0,
+        "n_terms_annotated": 3,
+        "n_terms_tested": 3,
+        "n_universe": 30
+      },
+      "terms": {
+        "GO:0006281": {
+          "overlap_count": 1.0,
+          "padj": 1.0,
+          "pvalue": 0.9428824049513704
+        },
+        "GO:0006950": {
+          "overlap_count": 2.0,
+          "padj": 1.0,
+          "pvalue": 0.600176834659593
+        },
+        "GO:0008150": {
+          "overlap_count": 9.0,
+          "padj": 1.0,
+          "pvalue": 1.0
+        }
+      }
+    },
+    "kegg_all": {
+      "metrics": {
+        "n_background_input": 30,
+        "n_background_rows_excluded": 0,
+        "n_background_unmapped": 0,
+        "n_enriched": 0,
+        "n_mapping_pairs": 43,
+        "n_mapping_rows": 43,
+        "n_pathway_aliases_normalized": 0,
+        "n_query_input": 18,
+        "n_query_mapped": 18,
+        "n_query_unmapped": 0,
+        "n_terms_annotated": 3,
+        "n_terms_tested": 3,
+        "n_universe": 30
+      },
+      "terms": {
+        "map00010": {
+          "overlap_count": 6.0,
+          "padj": 0.09379310344827592,
+          "pvalue": 0.03126436781609197
+        },
+        "map01100": {
+          "overlap_count": 18.0,
+          "padj": 1.0,
+          "pvalue": 1.0
+        },
+        "map03010": {
+          "overlap_count": 6.0,
+          "padj": 0.1875862068965515,
+          "pvalue": 0.12505747126436767
+        }
+      }
+    },
+    "kegg_down": {
+      "metrics": {
+        "n_background_input": 30,
+        "n_background_rows_excluded": 0,
+        "n_background_unmapped": 0,
+        "n_enriched": 1,
+        "n_mapping_pairs": 43,
+        "n_mapping_rows": 43,
+        "n_pathway_aliases_normalized": 0,
+        "n_query_input": 9,
+        "n_query_mapped": 9,
+        "n_query_unmapped": 0,
+        "n_terms_annotated": 3,
+        "n_terms_tested": 3,
+        "n_universe": 30
+      },
+      "terms": {
+        "map00010": {
+          "overlap_count": 4.0,
+          "padj": 0.07374005305039791,
+          "pvalue": 0.04916003536693194
+        },
+        "map01100": {
+          "overlap_count": 9.0,
+          "padj": 1.0,
+          "pvalue": 1.0
+        },
+        "map03010": {
+          "overlap_count": 5.0,
+          "padj": 0.04164456233421758,
+          "pvalue": 0.013881520778072528
+        }
+      }
+    },
+    "kegg_up": {
+      "metrics": {
+        "n_background_input": 30,
+        "n_background_rows_excluded": 0,
+        "n_background_unmapped": 0,
+        "n_enriched": 0,
+        "n_mapping_pairs": 43,
+        "n_mapping_rows": 43,
+        "n_pathway_aliases_normalized": 0,
+        "n_query_input": 9,
+        "n_query_mapped": 9,
+        "n_query_unmapped": 0,
+        "n_terms_annotated": 3,
+        "n_terms_tested": 3,
+        "n_universe": 30
+      },
+      "terms": {
+        "map00010": {
+          "overlap_count": 2.0,
+          "padj": 1.0,
+          "pvalue": 0.600176834659593
+        },
+        "map01100": {
+          "overlap_count": 9.0,
+          "padj": 1.0,
+          "pvalue": 1.0
+        },
+        "map03010": {
+          "overlap_count": 1.0,
+          "padj": 1.0,
+          "pvalue": 0.9428824049513704
+        }
+      }
+    }
+  },
+  "environment": {
+    "Bioconductor": "3.23",
+    "DESeq2": "1.52.0",
+    "R": "4.6.1",
+    "clusterProfiler": "4.20.2",
+    "ggplot2": "4.0.3",
+    "python": "3.13.2",
+    "python_lock_sha256": "627dcf755fce2ca3d5effbf5718f1889266cf92609754a15b195e39f68c85dd3",
+    "r_lock_sha256": "7e8572ba75bfb542fe41fa502db6e18f09a57db5b65290efd3b81f521d36aad6",
+    "scope": "image_build_verified"
+  },
+  "heatmap": {
+    "group_column": "condition",
+    "n_common_genes": 30,
+    "n_constant_significant": 0,
+    "n_deg_missing_statistics": 0,
+    "n_genes_requested": 50,
+    "n_genes_used": 18,
+    "n_groups": 2,
+    "n_samples": 6,
+    "n_significant": 18,
+    "n_significant_missing_expression": 0,
+    "n_usable": 18
+  },
+  "input_sha256": {
+    "counts.csv": "d0e5460788d582d803cb70525256e62eeb980cd76530f5add56976f887893af5",
+    "go.tsv": "5d6699ea6ec03474136b37224558d871afd106dd9ca2962d8dda486851d4d1ee",
+    "kegg.tsv": "601982bb0edc77df43f4752b487089826d45092e0b2763763fe71da8fe7beeb8",
+    "metadata.csv": "206a1afe0177fe5c1c91c5a6b0b6de508333d4ac69f38a374743a1c90c64be0f"
+  },
+  "pca_summary": {
+    "genes_input": 30,
+    "n_genes_pca": 30,
+    "n_genes_vst": 30,
+    "n_groups": 2,
+    "n_samples": 6,
+    "pc1_variance": 98.4012283956765,
+    "pc2_variance": 1.11594639943625
+  },
+  "volcano": {
+    "n_down": 9,
+    "n_excluded": 0,
+    "n_labels": 10,
+    "n_log2fc_missing": 0,
+    "n_ns": 12,
+    "n_padj_missing": 0,
+    "n_padj_zero": 0,
+    "n_plotted": 30,
+    "n_total": 30,
+    "n_up": 9
+  }
+}

@@ -134,7 +134,8 @@ def prepare_enrichment(query: frozenset[str], background: frozenset[str],
     metrics = {"n_query_input": len(query), "n_query_mapped": len(foreground),
                "n_background_input": len(background), "n_universe": len(universe),
                "n_query_unmapped": len(query - mapped), "n_background_unmapped": len(background - mapped),
-               "n_terms_tested": len(grouped)}
+               "n_terms_annotated": len(grouped),
+               "n_terms_tested": sum(bool(genes & foreground) for genes in grouped.values())}
     warnings: list[dict[str, Any]] = []
     for key in ("n_query_unmapped", "n_background_unmapped"):
         if metrics[key]:

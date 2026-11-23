@@ -1,13 +1,13 @@
-# Shared exact ORA and rendering. No test probabilities are computed in Python.
+# Shared clusterProfiler ORA and a compatibility adapter for the public CSVs.
 run_ora <- function(opt, prefix, id_column, name_column, ontology_column = NULL) {
     label <- toupper(prefix)
     read_input <- function(key) {
         read.csv(opt[[key]], colClasses = "character", check.names = FALSE,
                  na.strings = NULL, fileEncoding = "UTF-8")
     }
-    query <- read_input("--query")$gene_id
-    universe <- read_input("--universe")$gene_id
-    mapping <- read_input("--mapping")
+    query <- unique(read_input("--query")$gene_id)
+    universe <- unique(read_input("--universe")$gene_id)
+    mapping <- unique(read_input("--mapping"))
     p_cutoff <- as.numeric(opt[["--pvalue"]])
     q_cutoff <- as.numeric(opt[["--padj"]])
     output <- opt[["--output"]]
@@ -16,29 +16,46 @@ run_ora <- function(opt, prefix, id_column, name_column, ontology_column = NULL)
     n <- length(query)
     N <- length(universe)
     term_groups <- split(mapping, mapping[[id_column]])
-    results <- lapply(term_groups, function(association) {
+    # No species inference, annotation expansion, network lookup, or ID conversion.
+    # Retain every nonempty gene set in the mapped universe, including sets >500.
+    # Read the unfiltered result slot: qvalue estimates can be NA for small families.
+    # Public significance remains pvalue <= cutoff AND BH padj <= cutoff.
+    enrichment <- clusterProfiler::enricher(
+        gene = query, universe = universe,
+        TERM2GENE = unique(mapping[c(id_column, "gene_id")]),
+        TERM2NAME = unique(mapping[c(id_column, name_column)]),
+        pAdjustMethod = "BH", pvalueCutoff = 1, qvalueCutoff = 1,
+        minGSSize = 1L, maxGSSize = N
+    )
+    # With a nonempty mapped query and no size exclusion, NULL is an engine error,
+    # not a valid no-significant-terms result. Never invent a replacement table.
+    if (is.null(enrichment)) stop("clusterProfiler returned NULL for mapped input")
+    native <- enrichment@result
+    stopifnot(all(c("ID", "Description", "GeneRatio", "BgRatio", "Count", "pvalue", "p.adjust") %in% names(native)),
+              !anyDuplicated(native$ID), setequal(enrichment@universe, universe))
+    results <- lapply(seq_len(nrow(native)), function(i) {
+        row <- native[i, , drop = FALSE]
+        association <- term_groups[[as.character(row$ID)]]
+        if (is.null(association)) stop("clusterProfiler returned an unknown term")
         members <- unique(association$gene_id)
         hit <- sort(intersect(query, members))
         k <- length(hit)
         M <- length(members)
-        # Rows: query / non-query; columns: in term / not in term.
-        contingency <- matrix(c(k, n - k, M - k, N - M - n + k), nrow = 2L, byrow = TRUE)
-        stopifnot(all(contingency >= 0L))
-        p <- stats::fisher.test(contingency, alternative = "greater", conf.int = FALSE)$p.value
-        data.frame(go_id = association[[id_column]][1], description = association[[name_column]][1],
+        # Membership formatting is deterministic, statistics come ONLY from enricher.
+        # Do not split native geneID on '/': a user gene identifier may contain '/'.
+        stopifnot(as.integer(row$Count) == k, row$GeneRatio == paste0(k, "/", n),
+                  row$BgRatio == paste0(M, "/", N))
+        data.frame(go_id = as.character(row$ID), description = as.character(row$Description),
                    ontology = if (is.null(ontology_column)) "" else association[[ontology_column]][1], overlap_count = k, query_size = n,
                    term_size = M, universe_size = N, gene_ratio = k / n,
                    bg_ratio = M / N, fold_enrichment = (k / n) / (M / N),
-                   pvalue = p, padj = NA_real_, genes = paste(hit, collapse = ";"),
+                   pvalue = row$pvalue, padj = row$p.adjust, genes = paste(hit, collapse = ";"),
                    stringsAsFactors = FALSE)
     })
     all_results <- do.call(rbind, results)
     rownames(all_results) <- NULL
     names(all_results)[1] <- id_column
     if (is.null(ontology_column)) all_results$ontology <- NULL
-    # Include EVERY term represented in effective universe, including zero-overlap terms.
-    # One BH family per run; no size filter or annotation expansion.
-    all_results$padj <- stats::p.adjust(all_results$pvalue, method = "BH")
     all_results <- all_results[order(all_results$padj, all_results$pvalue, all_results[[id_column]]), ]
     enriched <- all_results[all_results$overlap_count > 0 &
                            all_results$pvalue <= p_cutoff & all_results$padj <= q_cutoff, ]
@@ -53,7 +70,8 @@ run_ora <- function(opt, prefix, id_column, name_column, ontology_column = NULL)
     write_results(enriched, paste0(prefix, "_enrichment.csv"))
 
     plot_results <- function(kind) {
-        png(file.path(output, paste0(prefix, "_", kind, ".png")), width = 1400, height = 1000, res = 130)
+        png(file.path(output, paste0(prefix, "_", kind, ".png")), width = 1400, height = 1000, res = 130,
+            type = if (.Platform$OS.type == "unix" && capabilities("cairo")) "cairo" else getOption("bitmapType"))
         on.exit(dev.off())
         if (nrow(enriched) == 0L) {
             plot.new()
@@ -93,6 +111,8 @@ run_ora <- function(opt, prefix, id_column, name_column, ontology_column = NULL)
     plot_results("barplot")
     cat("R_VERSION=", R.version.string, "\n", sep = "")
     cat("STATS_VERSION=", as.character(packageVersion("stats")), "\n", sep = "")
+    cat("CLUSTERPROFILER_VERSION=", as.character(packageVersion("clusterProfiler")), "\n", sep = "")
+    cat("ENRICHIT_VERSION=", as.character(packageVersion("enrichit")), "\n", sep = "")
     cat("N_TERMS_TESTED=", nrow(all_results), "\n", sep = "")
     cat("N_ENRICHED=", nrow(enriched), "\n", sep = "")
 }

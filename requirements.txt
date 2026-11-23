@@ -1,12 +1,18 @@
 # XLSX annotation input and shared backend dependencies.
 openpyxl>=3.1.5,<4
 jsonschema>=4.23,<5
+referencing>=0.37,<1
 httpx>=0.28,<0.29
 python-dotenv>=1.0,<2
 pydantic>=2.10,<3
+pydantic-core>=2.27,<3
 # Local workspace UI; 1.64 provides stateful tabs and upload AppTest support.
 streamlit>=1.64,<1.65
 # Explicit preview dependencies (already used transitively by Streamlit).
 pandas>=2.2,<4
 Pillow>=10.4,<13
+# Read-only local API transport (no analysis endpoints in Phase 8.1).
+fastapi>=0.143,<0.144
+starlette>=1.6,<2
+uvicorn>=0.53,<0.54
 # R and DESeq2 are external runtime dependencies; pip does not install them.

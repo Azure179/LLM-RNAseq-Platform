@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from bulk_rnaseq import __version__
+from bulk_rnaseq.enrichment_engine import engine_provenance
 from bulk_rnaseq.enrichment_artifacts import verify_enrichment_outputs
 from bulk_rnaseq.enrichment_inputs import prepare_enrichment, read_gene_list, validate_enrichment_parameters
 from bulk_rnaseq.exceptions import SkillError
@@ -109,20 +110,22 @@ def run_kegg_enrichment(
                        "inputs": {key: str(path) for key, path in inputs.items()},
                        "parameters": {"padj_threshold": padj_threshold, "pvalue_threshold": pvalue_threshold,
                                       "mapping_sheet": mapping_sheet, "timeout": timeout},
-                       "methods": {"test": "R stats::fisher.test", "alternative": "greater", "adjustment": "BH",
+                       "methods": {"test": "clusterProfiler::enricher", "alternative": "greater", "adjustment": "BH",
                                    "background_source": origin, "background_rule": "eligible input genes intersect supplied pathway mapping",
                                    "annotation_source": "user_mapping", "mapping_format": mapping.format,
                                    "pathway_namespace": mapping.namespace, "gene_id_mapping": "exact user gene IDs; no conversion",
                                    "pathway_id_normalization": "path: prefix removed; koNNNNN -> mapNNNNN; deduplicate gene/pathway pairs",
                                    "pathway_name_source": "user-supplied or ID fallback; no online lookup",
                                    "threshold_rule": "padj <= threshold AND pvalue <= threshold AND overlap > 0",
-                                   "multiple_testing_family": "all pathways in effective universe, including zero-overlap pathways",
-                                   "term_size_filter": None, "plot_top_n": 20},
+                                   "multiple_testing_family": "mapped terms with positive query overlap",
+                                   "term_size_filter": {"min": 1, "max": len(prepared.universe)},
+                                   "qvalue_filter": "not applied", "plot_top_n": 20},
                        "metrics": {**prepared.metrics, "n_enriched": n_enriched, "n_mapping_rows": mapping.n_rows,
                                    "n_mapping_pairs": len(mapping.pairs), "n_pathway_aliases_normalized": aliases_changed,
                                    "n_background_rows_excluded": background_dropped},
                        "warnings": warnings,
-                       "provenance": {"package_version": __version__, **versions, "input_sha256": input_hashes,
+                       "provenance": {"package_version": __version__, **engine_provenance(prepared),
+                                      **versions, "input_sha256": input_hashes,
                                       "r_scripts_sha256": {script.name: sha256(script), "enrichment_common.R": sha256(scripts / "enrichment_common.R")},
                                       "artifact_sha256": {name: sha256(stage / name) for name in KEGG_FILES}}}
             for name in KEGG_FILES:

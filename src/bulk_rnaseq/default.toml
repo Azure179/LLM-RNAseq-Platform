@@ -1,0 +1,6 @@
+schema_version = 1
+
+[app]
+name = "bulk-rnaseq-skill"
+environment = "local"
+log_level = "INFO"

@@ -20,6 +20,7 @@ from bulk_rnaseq.llm.json_utils import unique_object, reject_constant
 from bulk_rnaseq.llm.tool_adapter import ToolAdapter
 from bulk_rnaseq.logging_config import run_logger
 from bulk_rnaseq.registry import SkillRegistry
+from bulk_rnaseq.result_schema import SkillResult
 from bulk_rnaseq.run_io import write_json
 
 
@@ -89,8 +90,10 @@ def parse_object(content: str) -> dict[str, Any]:
 
 
 class ToolRunner:
-    def __init__(self, client: DeepSeekClient, registry: SkillRegistry) -> None:
+    def __init__(self, client: DeepSeekClient, registry: SkillRegistry, *,
+                 execute_business: Callable[[str, dict[str, Any]], SkillResult] | None = None) -> None:
         self.client, self.registry = client, registry
+        self.execute_business = execute_business
         self.adapter = ToolAdapter(registry)
         self.catalog = build_catalog(registry)
 
@@ -205,7 +208,8 @@ class ToolRunner:
             if progress:
                 progress("running", result.skill_name)
             logger.info("Execution start: skill=%s output=%s", result.skill_name, output)
-            skill_result = self.registry.execute(result.skill_name, validated)
+            skill_result = (self.execute_business(result.skill_name, arguments) if self.execute_business
+                            else self.registry.execute(result.skill_name, validated))
             result.skill_result = skill_result.to_dict()
             result.status = skill_result.status
             result.error_code, result.message = skill_result.error_code, skill_result.message or ""

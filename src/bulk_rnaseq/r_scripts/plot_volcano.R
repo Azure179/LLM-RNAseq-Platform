@@ -28,7 +28,8 @@ render_volcano <- function() {
   ymax <- max(1, y, -log10(alpha)) * 1.25
   value <- function(key, default) if (is.null(options[[key]])) default else options[[key]]
   colors <- c(Down = value("color-down", "#3974B5"), NS = value("color-ns", "#A8A8A8"), Up = value("color-up", "#D54E4E"))
-  grDevices::png(options$plot, width = as.integer(value("width", 1200)), height = as.integer(value("height", 900)), res = 150)
+  grDevices::png(options$plot, width = as.integer(value("width", 1200)), height = as.integer(value("height", 900)), res = 150,
+    type = if (.Platform$OS.type == "unix" && capabilities("cairo")) "cairo" else getOption("bitmapType"))
   tryCatch({
     graphics::par(mar = c(6, 5, 4, 2))
     graphics::plot(NA_real_, NA_real_, type = "n", xlim = c(-xmax, xmax), ylim = c(0, ymax),

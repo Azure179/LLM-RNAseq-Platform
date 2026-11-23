@@ -76,12 +76,4 @@ input/kegg_mapping/{同一 batch_id}/
 
 默认测试不调用 API/R。AppTest 覆盖真实 UI 代码与上传控件，但不是浏览器鼠标手工验收。
 
-## 本次实测（2026-09-29）
-
-- 导入与 UI 相关专项：143 passed。
-- 全量回归：849 passed、60 skipped，48.33 秒。API/R 显式测试未开启；另有 Windows 符号链接权限测试跳过。
-- 使用现有 `Real_DATA_TEST/input/Acanthopagrus_schlegelii.emapper.annotations.tsv` 和 `count_matrix.csv`，经正式 FileImportService 在临时项目中验证，不修改已有项目或真实原件。
-- 35,951 条注释记录；生成 4,191,346 条 GO 关联（27,707 个原始 query ID，23,492 个 GO ID）及 83,294 条 KEGG 关联（15,979 个原始 query ID，393 个 pathway ID）。这些是注释关联数，不是显著富集数。
-- 原始 query 与 24,581 个 count gene ID 的精确 coverage 均为 0，正确产生警告。这套数据仍需此前的 Asc crosswalk，不能直接将本次生成表用于有效的富集。
-- counts 导入和 eggNOG 转换共约 43.38 秒；临时测试项目由测试结束清理。没有留下新的用户项目，没有 R 或 DeepSeek 调用。
-- 本次未尝试浏览器鼠标验收，不将组件测试报告成真实浏览器测试。
+Public edition. The detailed historical evidence is retained in the local audit archive. See the [public demonstration](../examples/demo/README.md) and the [release acceptance matrix](../PHASE10_FINAL_RELEASE_REPORT.md).

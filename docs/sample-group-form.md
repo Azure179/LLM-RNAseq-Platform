@@ -38,19 +38,4 @@
 - `tests/test_sample_groups.py`：20 项新增后端与 AppTest 测试。
 - README / 本说明：用户操作与限制。
 
-## 验证
-
-新增专项 20 passed，涵盖无需文件保存、顺序保持、重启恢复、项目隔离、空/非法组名、缺失样本、确认替换、旧版本保留、过期表单、保存期间并发修改和损坏旧 Metadata 的恢复。
-
-全量免费回归：903 passed、60 skipped，61.20 秒。未开启真实 API/R 集成测试。
-
-实际 count 文件在临时项目中完成生成验证：24,581 个基因、9 个样本，使用已有真实 metadata 明确提供的 O/OT/T 各3个样本分组（不是按名字推断）。保存、重新打开服务、执行上下文绑定和 PCA 输入就绪检查均通过；没有修改用户项目，没有运行 R 或 DeepSeek。
-
-UI 验证使用 Streamlit AppTest，不冒充浏览器鼠标验收。
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_sample_groups.py -q
-.\.venv\Scripts\python.exe -m pytest -q
-```
-
-当前采用适合常规 Bulk RNA-seq 小批量样本的逐样本输入框；没有新增复杂分组编辑器、自动分类、Workflow 或统计功能。
+Public edition. The detailed historical evidence is retained in the local audit archive. See the [public demonstration](../examples/demo/README.md) and the [release acceptance matrix](../PHASE10_FINAL_RELEASE_REPORT.md).

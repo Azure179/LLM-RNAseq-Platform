@@ -38,8 +38,7 @@ def fake_go(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedP
     options = dict(zip(command[2::2], command[3::2]))
     output = Path(options["--output"])
     rows = [
-        ["GO:0006950", "Synthetic association set", "BP", 5, 5, 5, 20, 1, .25, 4, 1 / 15504, 3 / 15504, "g1;g2;g3;g4;g5"],
-        ["GO:0006281", "Synthetic association set", "BP", 0, 5, 15, 20, 0, .75, 0, 1, 1, ""],
+        ["GO:0006950", "Synthetic association set", "BP", 5, 5, 5, 20, 1, .25, 4, 1 / 15504, 2 / 15504, "g1;g2;g3;g4;g5"],
         ["GO:0008150", "Synthetic association set", "BP", 5, 5, 20, 20, 1, 1, 1, 1, 1, "g1;g2;g3;g4;g5"],
     ]
     filtered = [row for row in rows if row[3] > 0 and row[10] <= float(options["--pvalue"]) and row[11] <= float(options["--padj"])]
@@ -50,7 +49,7 @@ def fake_go(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedP
             writer.writerows(data)
     for name in ("go_dotplot.png", "go_barplot.png"):
         (output / name).write_bytes(fixture_png())
-    return subprocess.CompletedProcess(command, 0, f"R_VERSION=test-fixture\nSTATS_VERSION=test-fixture\nN_TERMS_TESTED=3\nN_ENRICHED={len(filtered)}\n", "")
+    return subprocess.CompletedProcess(command, 0, f"R_VERSION=test-fixture\nSTATS_VERSION=test-fixture\nCLUSTERPROFILER_VERSION=test-fixture\nENRICHIT_VERSION=test-fixture\nN_TERMS_TESTED=2\nN_ENRICHED={len(filtered)}\n", "")
 
 
 def test_normal_outputs(go_files: tuple[Path, Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

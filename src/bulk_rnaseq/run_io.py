@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 import shutil
 from tempfile import NamedTemporaryFile
@@ -16,13 +17,20 @@ from bulk_rnaseq.exceptions import SkillError
 from bulk_rnaseq.logging_config import run_logger
 from bulk_rnaseq.validation import require_input_file
 from bulk_rnaseq.models import ResultEnvelope
+from bulk_rnaseq.project_paths import paths_for_document
 
 
 ResultT = TypeVar("ResultT", bound=ResultEnvelope)
 
 
 def publish_result(result: ResultT, summary: dict[str, Any]) -> ResultT:
-    """Publish exactly the same JSON snapshot that Python/CLI callers receive."""
+    """Publish the result; project-owned storage encodes paths, runtime stays native."""
+    # Only this image's build verifier writes this package-local receipt.
+    receipt = Path(__file__).with_name("_verified_environment.json")
+    if receipt.is_file():
+        environment = json.loads(receipt.read_text(encoding="utf-8"))
+        summary = {**summary, "provenance": {**summary.get("provenance", {}),
+                                              "environment": environment}}
     completed = result.with_summary(summary)
     write_json(completed.summary_json, completed.to_dict())
     return completed
@@ -62,7 +70,15 @@ def reserve_output(path: Path, run_id: str) -> Iterator[None]:
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
-    """Never expose a partially written JSON document."""
+    """Atomically publish JSON, encoding internal project paths when applicable.
+
+    A lock/CAS at the owning service protects read-modify-write transactions;
+    atomic replacement alone is deliberately not advertised as lost-update safety.
+    """
+    project_paths = paths_for_document(path)
+    if project_paths is not None:
+        project_paths.resolve(path)
+        payload = project_paths.encode(payload)
     temporary: Path | None = None
     try:
         with NamedTemporaryFile(mode="w", dir=path.parent, prefix=".json-", suffix=".tmp",
@@ -70,6 +86,8 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
             temporary = Path(handle.name)
             json.dump(payload, handle, ensure_ascii=False, indent=2, allow_nan=False)
             handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
         temporary.replace(path)
     finally:
         if temporary is not None:

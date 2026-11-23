@@ -10,6 +10,7 @@ from bulk_rnaseq.registry import SkillRegistry
 from bulk_rnaseq.result_schema import SkillResult
 from bulk_rnaseq.run_io import analysis_run, sha256, snapshot_input, write_json
 from bulk_rnaseq.workspace import ProjectManager, ProjectError
+from bulk_rnaseq.workspace.deg_reuse import DegInputSnapshot
 from bulk_rnaseq.workflow.history import ProjectHistory
 from .catalog import parameter_schema, validate_decision
 from .enrichment_plot import replot_enrichment
@@ -27,8 +28,9 @@ class CustomizationEngine:
         self.rscript_executable, self.timeout = rscript_executable, timeout
 
     def _input_path(self, path: Path) -> Path:
-        root = self.manager.open_project(self.project_key).root
-        path = self.manager._safe_path(root / path)
+        project = self.manager.get_project_context(self.project_key, require_inputs=False)
+        root = project.project_root
+        path = self.manager._safe_path(project.resolve_path(path))
         if not path.is_relative_to(root) or not path.is_file():
             raise SkillError("CUSTOMIZATION_PATH_REJECTED", "Only existing inputs inside the selected project are allowed.", operation="customization")
         return path
@@ -37,7 +39,7 @@ class CustomizationEngine:
         return sorted({kind for path in annotation_files for kind in annotation_categories(self._input_path(path))})
 
     def execute(self, plan: CustomizationPlan, *, source_run_id: str,
-                annotation_files: list[Path] | None = None) -> dict[str, Any]:
+                annotation_files: list[Path] | None = None, current_deg: dict[str, str] | None = None) -> dict[str, Any]:
         """One approved plan -> new result. Original source and inputs are never overwritten."""
         customization_id = uuid4().hex
         report: dict[str, Any] = {"customization_id": customization_id, "status": "failed", "source_run_id": source_run_id,
@@ -71,6 +73,10 @@ class CustomizationEngine:
                 payload = payload["skill_result"]
             source = SkillResult.from_dict(payload) if payload.get("schema_version") == "2.0" else SkillResult.from_legacy_summary(payload)
             report["source_skill"] = source.skill_name
+            if current_deg:
+                DegInputSnapshot(**current_deg).verify(self.manager, self.project_key)
+                report["verified_deg_input_sha256"] = current_deg
+            report["reuse_scope"] = "current_input_snapshot" if current_deg else "historical_run"
             target = decision.target_skill
             filtered_source = source.skill_name == "rnaseq.filter_by_annotation" and target == "rnaseq.deg" and decision.mode == "annotation_filter"
             if source.skill_name != target and not filtered_source and not (source.skill_name == "rnaseq.deg" and target == "rnaseq.volcano" and decision.mode == "parameter_override"):

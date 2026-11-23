@@ -20,7 +20,9 @@ def test_real_go(case: str, tmp_path: Path, request: pytest.FixtureRequest) -> N
                                rscript_executable=request.config.getoption("--rscript"))
     summary = json.loads(result.summary_json.read_text())
     assert summary["metrics"]["n_universe"] == 20
-    assert summary["metrics"]["n_terms_tested"] == 3
+    assert summary["metrics"]["n_terms_tested"] == (3 if case == "entire_universe" else 2)
+    assert summary["metrics"]["n_terms_annotated"] == 3
+    assert summary["provenance"]["engine"] == "clusterProfiler"
     with (result.output_dir / "go_all_results.csv").open() as handle:
         rows = {r["go_id"]: r for r in csv.DictReader(handle)}
     hit = rows["GO:0006950"]
@@ -29,8 +31,8 @@ def test_real_go(case: str, tmp_path: Path, request: pytest.FixtureRequest) -> N
         assert all(float(row["pvalue"]) == 1 for row in rows.values())
     else:
         assert float(hit["pvalue"]) == pytest.approx(1 / 15504)
-        assert float(hit["padj"]) == pytest.approx(3 / 15504)  # Includes zero-overlap GO in BH family.
-        assert int(rows["GO:0006281"]["overlap_count"]) == 0
+        assert float(hit["padj"]) == pytest.approx(2 / 15504)  # Native positive-overlap BH family.
+        assert "GO:0006281" not in rows
     assert summary["metrics"]["n_enriched"] == (0 if case in {"empty", "entire_universe"} else 1)
     for name in summary["artifacts"].values():
         assert (result.output_dir / name).is_file()

@@ -32,13 +32,15 @@ def test_real_kegg(case: str, tmp_path: Path, request: pytest.FixtureRequest) ->
     summary = json.loads(result.summary_json.read_text())
     with (result.output_dir / "kegg_all_results.csv").open() as handle:
         rows = {r["pathway_id"]: r for r in csv.DictReader(handle)}
-    assert len(rows) == 3 and summary["metrics"]["n_universe"] == 20
+    assert len(rows) == (3 if case == "whole_background" else 2)
+    assert summary["metrics"]["n_universe"] == 20
+    assert summary["provenance"]["engine"] == "clusterProfiler"
     if case == "whole_background":
         assert all(float(r["pvalue"]) == 1 for r in rows.values())
     else:
         assert float(rows["map00010"]["pvalue"]) == pytest.approx(1 / 15504)
-        assert float(rows["map00010"]["padj"]) == pytest.approx(3 / 15504)
-        assert int(rows["map00020"]["overlap_count"]) == 0
+        assert float(rows["map00010"]["padj"]) == pytest.approx(2 / 15504)
+        assert "map00020" not in rows
     assert summary["metrics"]["n_enriched"] == (0 if case in {"empty", "whole_background"} else 1)
     if case == "eggnog":
         assert summary["metrics"]["n_mapping_pairs"] == 40  # Not 80 from ko/map duplicate representations.

@@ -55,7 +55,7 @@ def build_parser(default_config_path: Path | None = None) -> argparse.ArgumentPa
     parser.add_argument(
         "--config",
         type=Path,
-        default=default_config_path or Path("config/default.toml"),
+        default=default_config_path or Path(__file__).with_name("default.toml"),
         help="Path to the TOML application configuration.",
     )
     parser.add_argument(
@@ -155,7 +155,7 @@ def main(
         return 2
     except (OSError, ValueError, tomllib.TOMLDecodeError) as cause:
         error = SkillError("CONFIG_ERROR", "Unable to load application configuration.",
-                           details={"reason": str(cause)},
+                           details={"reason": type(cause).__name__},
                            operation=_operation(getattr(args, "command", None)))
         _emit_json(error.to_dict())
         return 2
