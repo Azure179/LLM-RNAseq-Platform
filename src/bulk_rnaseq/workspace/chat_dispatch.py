@@ -6,7 +6,8 @@ from bulk_rnaseq.customization.engine import CustomizationEngine
 from bulk_rnaseq.customization.catalog import SKILLS as CUSTOMIZABLE_SKILLS
 from bulk_rnaseq.customization.planner import CustomizationPlanner
 from bulk_rnaseq.llm.exceptions import DeepSeekError
-from bulk_rnaseq.run_io import write_json, sha256
+from bulk_rnaseq.run_io import write_json
+from bulk_rnaseq.workspace.customization_sources import imported_annotations, resolve_customization_source
 from bulk_rnaseq.workflow.context import WorkflowContext
 from bulk_rnaseq.workflow.executor import WorkflowExecutor
 from bulk_rnaseq.workflow.final_response import WorkflowFinalResponseBuilder
@@ -15,6 +16,9 @@ from bulk_rnaseq.workflow.planner import WorkflowPlanner
 from bulk_rnaseq.workspace import FileRole, ProjectError
 from bulk_rnaseq.workspace.chat_router import ChatRoute
 from bulk_rnaseq.workspace.result_manager import ResultManager, SKILL_LABELS
+from bulk_rnaseq.workspace.result_resolver import ResultResolver
+from bulk_rnaseq.workflow.models import WorkflowPlan, WorkflowStep, ProjectResultBinding
+from bulk_rnaseq.workflow.validator import PlanValidator
 
 if TYPE_CHECKING:
     from bulk_rnaseq.workspace.chat_controller import ChatResult
@@ -44,7 +48,10 @@ class ChatDispatch:
         project = self.manager.get_project_context(self.key)
         host = WorkflowContext.from_project_context(project, confirmed_parameters=context.confirmed_parameters,
                                                     history=ProjectHistory(self.manager, self.key))
-        planned = WorkflowPlanner(self.runner.client, self.runner.registry).plan(result.user_message, context=host, available_groups=groups)
+        planner = WorkflowPlanner(self.runner.client, self.runner.registry)
+        shared = self.controller.workflow_service
+        planned = (shared.plan(self.key, result.user_message, planner=planner) if shared else
+                   planner.plan(result.user_message, context=host, available_groups=groups))
         add_usage(result, planned.response.usage)
         if planned.decision.status != "ready":
             result.status = planned.decision.status
@@ -52,20 +59,70 @@ class ChatDispatch:
             result.assistant_message = ("还需要补充：" + ", ".join(result.missing) + "。当前分组：" + ", ".join(groups)
                                         if result.status == "needs_input" else "当前不支持该分析请求。未执行任何步骤。")
             return
-        result.workflow_id = planned.plan.workflow_id
+        self.execute_plan(result, planned.validation, context)
+
+    def reuse(self, result: "ChatResult", route: ChatRoute, context: Any,
+              source_run_id: str | None = None) -> None:
+        """Model selects semantics; host selects a verified identity and binds real artifacts."""
+        result.stage, result.selected_skill = "source_selection", route.target_skill
+        enrichment = route.target_skill in {"rnaseq.go", "rnaseq.kegg"}
+        required = ("deg_csv", "filtered_csv") if enrichment else ("deg_csv",)
+        resolution = ResultResolver(self.manager, self.key).find_compatible_result(skill_name="rnaseq.deg",
+            required_outputs=required, run_id=source_run_id or route.source_run_id,
+            treatment=route.treatment, control=route.control, selection=route.source_reference)
+        if resolution.status != "resolved":
+            result.status, result.error_code = "needs_input", resolution.error_code
+            result.source_options = [{"run_id": r.run_id,
+                "label": f"{r.comparison} — {r.created_at.isoformat()} — {r.run_id}"} for r in resolution.candidates]
+            result.assistant_message = ("找到多个兼容 DEG，请选择来源；不会默认使用最新结果。" if resolution.candidates
+                else "当前项目没有可核验的兼容 DEG 来源。请先完成差异分析，或明确比较方向/来源。")
+            if resolution.error_code in {"STALE_DEG_RESULT", "DEG_INPUT_VERSION_UNVERIFIED"}:
+                result.assistant_message = "已有 DEG 的输入版本不同或无法核验。请先用当前 counts 和 metadata 执行 DEG。"
+            return
+        source = resolution.result
+        result.error_code, result.details, result.missing = None, {}, []
+        result.source_run_id = source.run_id
+        result.source_label = f"{source.comparison} — {source.run_id}"
+        full = ProjectResultBinding(run_id=source.run_id, output="deg_csv")
+        bindings = ({"gene_list": ProjectResultBinding(run_id=source.run_id, output="filtered_csv",
+                        gene_subset=route.gene_subset), "analysis_genes": full} if enrichment
+                    else {"deg_result_file": full})
+        plan = WorkflowPlan(project_id=self.key, user_request=result.user_message, steps=[WorkflowStep(
+            step_id="reuse", skill_name=route.target_skill, parameters=route.parameters, input_bindings=bindings)])
+        project = self.manager.get_project_context(self.key)
+        host = WorkflowContext.from_project_context(project, confirmed_parameters=context.confirmed_parameters,
+            history=ProjectHistory(self.manager, self.key))
+        validation = PlanValidator(self.runner.registry).validate(plan, host)
+        if not validation.valid:
+            result.status, result.error_code = "needs_input", validation.errors[0].code
+            result.assistant_message = "来源已找到，但执行条件未满足：" + ", ".join(e.code for e in validation.errors)
+            result.details = {"errors": [e.model_dump() for e in validation.errors]}
+            return
+        self.execute_plan(result, validation, context, current_deg=resolution.current_input_sha256)
+        if not resolution.current_input_sha256:
+            result.assistant_message += f" 本次使用指定的历史 DEG {source.run_id}。"
+        if len(result.steps) == 1:
+            result.run_id = result.steps[0].get("run_id")
+
+    def execute_plan(self, result: "ChatResult", validation: Any, context: Any, *,
+                     current_deg: dict[str, str] | None = None) -> None:
+        project = self.manager.get_project_context(self.key)
+        result.workflow_id = validation.validated_plan.workflow_id
         result.steps = [{"step_id": step.step_id, "skill_name": step.skill_name, "status": "pending",
-                         "dependencies": planned.validation.dependencies[step.step_id]} for step in planned.plan.steps]
+                         "dependencies": validation.dependencies[step.step_id]} for step in validation.validated_plan.steps]
         self.check_inputs_unchanged()
         # Reuse import provenance checks; the DAG validator only checks readable paths.
-        required = {binding.key for bindings in planned.validation.resolved_bindings.values()
+        required = {binding.key for bindings in validation.resolved_bindings.values()
                     for binding in bindings.values() if binding.source == "project_input"}
         for role in required:
             self.service._record(self.manager.open_project(self.key), FileRole(role))
         output = project.output_root / "workflows" / result.workflow_id
         def progress(step_id: str, skill: str, status: str) -> None:
             self.notify("step_" + status, f"{step_id} · {SKILL_LABELS.get(skill, skill)}")
-        workflow = WorkflowExecutor(self.runner.registry, self.manager, self.key,
-            rscript_executable=context.rscript_executable, timeout=context.timeout_seconds or 600).execute(planned.validation, progress=progress)
+        shared = self.controller.workflow_service
+        workflow = (shared.run(self.key, validation.validated_plan, current_deg=current_deg) if shared else
+            WorkflowExecutor(self.runner.registry, self.manager, self.key,
+                rscript_executable=context.rscript_executable, timeout=context.timeout_seconds or 600).execute(validation, progress=progress, current_deg=current_deg))
         result.stage, result.status = "workflow_execution", workflow.status
         result.steps = [{"step_id": step, "skill_name": record["skill_name"], "status": record["status"],
                          "run_id": record.get("run_id"), "dependencies": record.get("depends_on", []),
@@ -80,7 +137,7 @@ class ChatDispatch:
         write_json(output / "final_response.json", final.model_dump(mode="json"))
         result.final_response_status = final.status
         result.assistant_message = final.final_response or "分析记录已保存，但最终总结未通过验证。请查看 Results，不要重复运行。"
-        if not final.final_response:
+        if final.error_code:
             result.error_code = final.error_code
         result.summary = {"completed_steps": workflow.completed_steps, "failed_steps": workflow.failed_steps,
                           "skipped_steps": workflow.skipped_steps}
@@ -92,18 +149,7 @@ class ChatDispatch:
             result.artifacts.append({"name": prefix + label, "path": path.relative_to(browser.project_root).as_posix()})
 
     def annotation_files(self) -> list[Path]:
-        project = self.manager.open_project(self.key)
-        paths: list[Path] = []
-        seen_hashes: set[str] = set()
-        for role in (FileRole.GO_MAPPING, FileRole.KEGG_MAPPING):
-            record = self.service._record(project, role)  # Existing binding/hash validation, not an untrusted path.
-            if record:
-                candidate = self.manager._safe_path(project.root / record["original_path"])
-                checksum = sha256(candidate)
-                if checksum not in seen_hashes:
-                    paths.append(candidate)
-                    seen_hashes.add(checksum)  # eggNOG import retains one original copy per mapping role.
-        return paths
+        return imported_annotations(self.manager, self.key)
 
     def customization(self, result: "ChatResult", route: ChatRoute, context: Any,
                       source_run_id: str | None = None) -> None:
@@ -113,34 +159,18 @@ class ChatDispatch:
             result.assistant_message = "这个 Skill 尚未提供安全定制参数；不会动态生成或执行脚本。"
             return
         browser = ResultManager(self.manager, self.key)
-        history = ProjectHistory(self.manager, self.key)
-        source_skill = "rnaseq.filter_by_annotation" if route.source_kind == "filtered_deg" else route.target_skill
-        candidates = [r for r in browser.list_runs(skill_name=source_skill, status="succeeded")
-                      if history.lookup(self.key, r.run_id) is not None]
-        if not candidates and route.target_skill == "rnaseq.volcano":
-            candidates = browser.list_runs(skill_name="rnaseq.deg", status="succeeded")
-        by_id = {r.run_id: r for r in candidates}
-        if source_run_id is not None and source_run_id not in by_id:
-            raise ProjectError("CUSTOMIZATION_SOURCE_UNAVAILABLE", "所选来源已不可用或不属于当前项目/结果类型。")
-        if source_run_id is None and route.source_reference == "recent":
-            for row in reversed(self.controller.history(self.key)):
-                if row["role"] != "assistant":
-                    continue
-                previous = row.get("result", {})
-                referenced = {previous.get("run_id"), *[s.get("run_id") for s in previous.get("steps", [])]}
-                compatible = referenced & set(by_id)
-                if compatible:
-                    if len(compatible) == 1:
-                        source_run_id = next(iter(compatible))
-                    break  # Multiple compatible steps in one response are ambiguous.
-        if source_run_id is None and len(candidates) == 1:
-            source_run_id = candidates[0].run_id
+        selection = resolve_customization_source(self.manager, self.key, route, source_run_id)
+        candidates = selection.candidates
+        if selection.status == "resolved":
+            source_run_id = selection.result.run_id
+        else:
+            source_run_id = None
         if source_run_id is None:
-            result.status, result.error_code = "needs_input", "SOURCE_SELECTION_REQUIRED" if candidates else "MISSING_UPSTREAM_DEPENDENCY"
+            result.status, result.error_code = "needs_input", selection.error_code or "MISSING_UPSTREAM_DEPENDENCY"
             result.source_options = [{"run_id": r.run_id, "label": f"{r.comparison or SKILL_LABELS.get(r.skill_name, r.skill_name)} — {r.run_id}"} for r in candidates]
             result.assistant_message = "请选择要定制的分析结果。" if candidates else "当前项目没有兼容的成功结果，请先完成相应分析。"
             return
-        source = by_id[source_run_id]
+        source = browser.get_run(source_run_id)
         result.source_run_id = source_run_id
         result.source_label = f"{source.comparison or SKILL_LABELS.get(source.skill_name, source.skill_name)} — {source_run_id}"
         engine = CustomizationEngine(self.manager, self.key, self.runner.registry,
@@ -155,7 +185,8 @@ class ChatDispatch:
         # Sorting/direction-only transformations do not need annotation content.
         if planned.decision.mode == "annotation_filter" and not planned.decision.parameters.get("keywords"):
             files = []
-        report = engine.execute(planned, source_run_id=source_run_id, annotation_files=files)
+        report = engine.execute(planned, source_run_id=source_run_id, annotation_files=files,
+                                current_deg=selection.current_input_sha256)
         result.status, result.error_code = report["status"], report.get("error_code")
         result.customization_id = report["customization_id"]
         result.changed_parameters = report["changed_parameters"]

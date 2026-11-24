@@ -18,12 +18,12 @@ from bulk_rnaseq.llm.execution_context import ExecutionContext
 from bulk_rnaseq.llm.single_request import SingleRequestRunner
 from bulk_rnaseq.llm.intent_catalog import build_catalog, defaults_for
 from bulk_rnaseq.logging_config import run_logger
-from bulk_rnaseq.run_io import sha256, write_json
 from bulk_rnaseq.workspace import FileImportService, ProjectError, ProjectManager
 from bulk_rnaseq.workspace.chat_store import ChatStore, now
 from bulk_rnaseq.workspace.readiness import PREFLIGHT_CHECKS
 from bulk_rnaseq.workspace.chat_router import ChatRoute, ChatRouter
 from bulk_rnaseq.workspace.chat_dispatch import ChatDispatch, add_usage
+from bulk_rnaseq.workspace.workflow_service import WorkflowService
 
 
 class ChatResult(BaseModel):
@@ -63,38 +63,24 @@ def default_runner(env_file: Path) -> SingleRequestRunner:
 class ChatController:
     def __init__(self, manager: ProjectManager, env_file: Path, *,
                  runner_factory: Callable[[], SingleRequestRunner] | None = None,
-                 enable_routing: bool = True) -> None:
+                 enable_routing: bool = True, workflow_service: WorkflowService | None = None) -> None:
         self.manager = manager
         self.service = FileImportService(manager)
         self.runner_factory = runner_factory or (lambda: default_runner(env_file))
         self.enable_routing = enable_routing
+        self.workflow_service = workflow_service
 
     def history(self, key: str) -> list[dict[str, Any]]:
         return ChatStore(self.manager, key).history()
 
     def _context(self, key: str, store: ChatStore) -> ExecutionContext:
+        # Historical outputs must be explicitly resolved, not implicitly overwritten by the last DEG.
         context = self.service.build_execution_context(key)
-        artifact_file = store.path("chat_upstream.json")
-        if not artifact_file.exists():
-            return context
-        record = store.read(artifact_file)
-        current = self.manager.open_project(key).metadata.files.model_dump()
-        if record.get("inputs") != {name: current[name] for name in ("count_matrix", "metadata")}:
-            return context  # File replacement/removal invalidates implicit upstream binding.
-        outputs = record.get("outputs", {})
-        for value in outputs.values():
-            path = self.manager._safe_path(context.project_root / value["path"]).resolve()
-            if not path.is_relative_to(context.output_root) or not path.is_file() or sha256(path) != value["sha256"]:
-                return context
-        bindings = {name: dict(values) for name, values in context.bindings.items()}
-        full, selected = outputs.get("deg_csv"), outputs.get("filtered_csv")
-        if full:
-            for name in ("rnaseq.volcano", "rnaseq.heatmap"):
-                bindings[name]["deg_result_file"] = full["path"]
-        if full and selected:
-            for name in ("rnaseq.go", "rnaseq.kegg"):
-                bindings[name].update(gene_list=selected["path"], analysis_genes=full["path"])
-        return context.model_copy(update={"bindings": bindings})
+        if self.workflow_service:
+            context = ExecutionContext.model_validate({**context.model_dump(),
+                "rscript_executable": self.workflow_service.rscript_executable,
+                "timeout_seconds": self.workflow_service.timeout})
+        return context
 
     def submit(self, project_key: str | None, text: str, request_id: str, *,
                progress: Callable[[str, str | None], None] | None = None,
@@ -114,6 +100,8 @@ class ChatController:
                 resumed_route = None
                 if previous:
                     if previous.get("status") == "completed":
+                        if previous["result"]["user_message"] != text:
+                            raise ProjectError("REQUEST_ID_CONFLICT", "同一请求标识不能用于不同内容。")
                         return ChatResult.model_validate(previous["result"])
                     if previous.get("status") == "awaiting_source":
                         result = ChatResult.model_validate(previous["result"])
@@ -182,11 +170,14 @@ class ChatController:
                         dispatch.workflow(result, context, groups)
                     elif route.request_type == "customization":
                         dispatch.customization(result, route, context, source_run_id)
+                    elif route.request_type == "result_reuse":
+                        dispatch.reuse(result, route, context, source_run_id)
                     else:
                         result.status = route.request_type
                         result.assistant_message = "请明确要做的分析或要修改的结果。" if route.request_type == "needs_input" else "当前不支持该请求，未执行任何分析。"
                 elif not any(context.bindings.values()):
                     result.status, result.error_code = "needs_input", "MISSING_PROJECT_INPUTS"
+                    result.missing = ["count_matrix", "metadata"]
                     result.assistant_message = "请先在 Files 导入 Count Matrix 和 Metadata，或准备分析所需的项目输入。"
                 else:
                     outcome = runner.run(safe_text, context, progress=notify, before_execute=pre_execute)
@@ -216,19 +207,13 @@ class ChatController:
                         else:
                             result.assistant_message = "分析未完成：" + (execution.message or "请查看错误码及本地运行日志。")
                     if source.get("status") == "succeeded":
-                        output_records = {}
                         for label, value in source.get("outputs", {}).items():
                             path = self.manager._safe_path(Path(value)).resolve()
                             if not path.is_relative_to(context.output_root) or not path.is_file():
                                 raise ProjectError("ARTIFACT_PATH_INVALID", "输出文件不在当前项目 results 内。")
                             relative = path.relative_to(context.project_root).as_posix()
                             result.artifacts.append({"name": label, "path": relative})
-                            if label in {"deg_csv", "filtered_csv"}:
-                                output_records[label] = {"path": relative, "sha256": sha256(path)}
-                        if execution.skill_name == "rnaseq.deg" and output_records:
-                            write_json(store.path("chat_upstream.json"), {
-                                "inputs": {name: inputs_snapshot[name] for name in ("count_matrix", "metadata")},
-                                "run_id": result.run_id, "outputs": output_records})
+                        ResultManager(self.manager, project_key).list_result_refs()
                 result.duration_seconds = round(perf_counter() - started, 3)
                 result = ChatResult.model_validate(runner.client.sanitize_for_audit(result.model_dump(mode="json")))
                 assistant_row = {"role": "assistant", "content": result.assistant_message, "timestamp": now(),
@@ -253,9 +238,17 @@ class ChatController:
                 result.status, result.error_code, result.assistant_message = "failed", error.code, str(error)
                 if isinstance(error, DeepSeekError) and error.code == "LLM_PLANNER_PLAN_INVALID":
                     codes = error.details.get("error_codes", [])
-                    if any(code in {"MISSING_PROJECT_INPUT", "MISSING_UPSTREAM_DEPENDENCY", "MISSING_BUSINESS_PARAMETER"} for code in codes):
+                    missing_codes = [code for code in codes if code in {
+                        "MISSING_PROJECT_INPUT", "MISSING_UPSTREAM_DEPENDENCY", "MISSING_BUSINESS_PARAMETER"}]
+                    if missing_codes:
                         result.status = "needs_input"
+                        result.error_code = missing_codes[0]
+                        result.missing = sorted({field for issue in error.details.get("errors", [])
+                            for field in issue.get("details", {}).get("missing", [])})
                         result.assistant_message = "计划缺少执行依赖，请先在 Files 补齐输入或明确所需的上游分析：" + ", ".join(codes)
+                elif error.code in {"MISSING_PROJECT_INPUT", "MISSING_UPSTREAM_DEPENDENCY", "MISSING_BUSINESS_PARAMETER"}:
+                    result.status = "needs_input"
+                    result.missing = error.details.get("missing", [])
                 elif isinstance(error, DeepSeekError) and error.code.startswith("LLM_"):
                     result.assistant_message = "AI service is temporarily unavailable 或响应未通过校验；未自动重试。错误码：" + error.code
         except Exception:
@@ -265,6 +258,7 @@ class ChatController:
                 result.status, result.error_code = "failed", "CHAT_OPERATION_FAILED"
                 result.assistant_message = "请求未完成；请检查 Results 与项目日志，不会自动重新执行。"
         if owned_request and not completed:
+            result.duration_seconds = round(perf_counter() - started, 3)
             try:
                 store.save_request(request_id, {"status": "completed", "result": result.model_dump(mode="json")})
                 store.save_assistant({"role": "assistant", "content": result.assistant_message, "timestamp": now(),

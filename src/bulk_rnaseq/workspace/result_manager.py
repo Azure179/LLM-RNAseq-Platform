@@ -1,8 +1,11 @@
-"""Read-only, project-scoped discovery of existing SkillResult documents."""
+"""Project-scoped result discovery and portable indexing; analysis artifacts stay immutable."""
 
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
+import logging
+from time import monotonic
 import mimetypes
 import os
 from pathlib import Path, PureWindowsPath
@@ -12,12 +15,18 @@ from bulk_rnaseq.llm.json_utils import unique_object, reject_constant
 from bulk_rnaseq.result_schema import SkillResult
 from bulk_rnaseq.workspace import ProjectError, ProjectManager
 from bulk_rnaseq.workspace.chat_store import ChatStore
+from bulk_rnaseq.workspace.result_ref import ResultRef, result_time
+from bulk_rnaseq.run_io import write_json
+from hashlib import sha256 as digest
+from bulk_rnaseq.project_paths import PREFIX
 
 
+LOGGER = logging.getLogger(__name__)
 MAX_JSON_BYTES = 2 * 1024 * 1024
 MAX_DOWNLOAD_BYTES = 300 * 1024 * 1024
 SOURCES = {"summary.json", "skill_result.json", "failure.json", "tool_execution.json"}
 COLLECTION_SOURCES = {"workflow_result.json", "customization.json"}
+CHECKPOINT_SOURCES = {"workflow_state.json"}
 SKILL_LABELS = {"rnaseq.deg": "Differential Expression", "rnaseq.pca": "PCA",
                 "rnaseq.volcano": "Volcano Plot", "rnaseq.heatmap": "Heatmap",
                 "rnaseq.go": "GO Enrichment", "rnaseq.kegg": "KEGG Enrichment",
@@ -61,6 +70,9 @@ class RunInfo:
     source_run_id: str | None = None
     step_id: str | None = None
     dependencies: list[str] = field(default_factory=list)
+    parent_run_ids: list[str] = field(default_factory=list)
+    completed_at: str | None = None
+    gene_subset: str | None = None
 
     @property
     def has_warning(self) -> bool:
@@ -96,7 +108,8 @@ def display_value(value: Any, depth: int = 0) -> Any:
 class ResultManager:
     def __init__(self, manager: ProjectManager, project_key: str, *, max_entries: int = 10000) -> None:
         self.manager, self.project_key = manager, project_key
-        self.project_root = manager.open_project(project_key).root
+        self.context = manager.get_project_context(project_key, require_inputs=False)
+        self.project_root = self.context.project_root
         self.root = self.project_root / "results"
         if type(max_entries) is not int or max_entries < 1:
             raise ProjectError("INVALID_PARAMETER", "max_entries 必须为正整数。")
@@ -107,7 +120,11 @@ class ResultManager:
         self.collections: list[dict[str, Any]] = []
 
     def validate_result_path(self, value: str | Path, *, must_exist: bool = True) -> Path:
+        if str(value).startswith(PREFIX):
+            value = self.context.resolve_path(value)
         raw = Path(value)
+        if not raw.is_absolute() and PureWindowsPath(str(value)).drive:
+            raise ProjectError("LEGACY_PATH_UNAVAILABLE", "Legacy Windows result path is not portable; explicit migration is required.")
         if ".." in raw.parts or (not raw.is_absolute() and PureWindowsPath(str(value)).drive):
             raise ProjectError("RESULT_PATH_NOT_ALLOWED", "结果路径必须位于当前项目 results 内。")
         path = self.manager._safe_path(self.root / raw).resolve()
@@ -127,7 +144,7 @@ class ResultManager:
             value = json.loads(data.decode("utf-8-sig"), object_pairs_hook=unique_object, parse_constant=reject_constant)
             if not isinstance(value, dict):
                 raise ValueError("Expected object")
-            return value
+            return self.context.restore_paths(value)
         except (ValueError, TypeError, RecursionError, OSError):
             raise ProjectError("RESULT_JSON_INVALID", "结果 JSON 无法读取；原文件未修改。") from None
 
@@ -151,7 +168,7 @@ class ResultManager:
                             continue
                         if entry.is_dir(follow_symlinks=False):
                             pending.append(path)
-                        elif entry.is_file(follow_symlinks=False) and entry.name in SOURCES | COLLECTION_SOURCES:
+                        elif entry.is_file(follow_symlinks=False) and entry.name in SOURCES | COLLECTION_SOURCES | CHECKPOINT_SOURCES:
                             sources.append(path)
             except OSError:
                 self.diagnostics.append("部分结果目录无法读取。")
@@ -165,16 +182,17 @@ class ResultManager:
             if not path.is_file():
                 return ArtifactInfo(label, filename, kind_for(filename), relative, None, "ARTIFACT_MISSING")
             return ArtifactInfo(label, filename, kind_for(filename), relative, path.stat().st_size)
-        except (ProjectError, OSError):
-            return ArtifactInfo(label, filename, kind_for(filename), None, None, "RESULT_PATH_NOT_ALLOWED")
+        except (ProjectError, OSError) as error:
+            code = "LEGACY_PATH_UNAVAILABLE" if getattr(error, "code", None) == "LEGACY_PATH_UNAVAILABLE" else "RESULT_PATH_NOT_ALLOWED"
+            return ArtifactInfo(label, filename, kind_for(filename), None, None, code)
 
     def _from_source(self, path: Path, payload: dict[str, Any], *, backend_id: str | None = None) -> RunInfo:
         source = SkillResult.from_dict(payload) if payload.get("schema_version") == "2.0" else SkillResult.from_legacy_summary(payload)
         params = source.inputs.get("parameters", source.metadata.get("parameters", {}))
-        stamp = source.metadata.get("started_at") or payload.get("started_at")
+        stamp = source.metadata.get("created_at") or source.metadata.get("started_at") or payload.get("started_at")
         time_source = "recorded"
         try:
-            stamp = datetime.fromisoformat(stamp).astimezone(timezone.utc).isoformat()
+            stamp = result_time(stamp).isoformat()
         except (ValueError, TypeError):
             stamp = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
             time_source = "file modification time (analysis time unavailable)"
@@ -183,6 +201,7 @@ class ResultManager:
                       source=path.relative_to(self.root).as_posix(), directory=path.parent.relative_to(self.root).as_posix(),
                       parameters=params if isinstance(params, dict) else {}, summary=source.summary, warnings=source.warnings,
                       backend_request_id=backend_id, error_code=source.error_code, message=source.message)
+        run.completed_at = source.metadata.get("completed_at")
         if run.parameters.get("treatment") and run.parameters.get("control"):
             run.comparison = f"{run.parameters['treatment']} vs {run.parameters['control']}"
         # Phase 4 summaries declare portable relative artifacts. Use these only
@@ -191,6 +210,8 @@ class ResultManager:
         if payload.get("schema_version") != "2.0":
             outputs = {key: str(path.parent / value) for key, value in payload.get("artifacts", {}).items()}
         run.artifacts = [self._artifact(key, value) for key, value in outputs.items()]
+        if any(a.error_code in {"RESULT_PATH_NOT_ALLOWED", "LEGACY_PATH_UNAVAILABLE"} for a in run.artifacts):
+            run.browser_warnings.append("Result paths cannot be resolved inside this project. Legacy absolute paths are not automatically remapped; explicit migration is required.")
         if not any(a.relative_path == run.source for a in run.artifacts):
             run.artifacts.append(self._artifact("result_record", path))
         return run
@@ -199,14 +220,18 @@ class ResultManager:
         self.runs, self.diagnostics, self.collections = [], [], []
         files = self._scan()
         documents: dict[Path, RunInfo] = {}
+        canonical_documents: dict[Path, dict[str, Any]] = {}
         # Summary documents are authoritative; embedded tool results are fallback.
         order = {"summary.json": 0, "skill_result.json": 1, "failure.json": 2}
         for path in sorted((p for p in files if p.name in order), key=lambda p: (order[p.name], str(p))):
             if path.parent in documents:
                 continue
             try:
-                run = self._from_source(path, self._json(path))
+                payload = self._json(path)
+                run = self._from_source(path, payload)
                 documents[path.parent] = run
+                if payload.get("schema_version") == "2.0":
+                    canonical_documents[path.parent] = SkillResult.from_dict(payload).to_dict()
                 self.runs.append(run)
             except (ProjectError, KeyError, ValueError, TypeError, OSError):
                 self.diagnostics.append(f"无法识别结果记录：{path.relative_to(self.root).as_posix()}")
@@ -215,6 +240,15 @@ class ResultManager:
                 payload = self._json(path)
                 backend_id = str(payload.get("request_id") or path.parent.name)
                 run = documents.get(path.parent / "skill") or documents.get(path.parent)
+                if run is None and isinstance(payload.get("skill_result"), dict) and payload["skill_result"].get("schema_version") == "2.0":
+                    # API single-tool execution persists the authoritative result in
+                    # a Workflow directory, separate from its tool audit envelope.
+                    # Link only one exact canonical result in THIS project. Matching
+                    # IDs alone would conceal conflicting metrics/artifact sources.
+                    embedded = SkillResult.from_dict(payload["skill_result"]).to_dict()
+                    matches = [documents[folder] for folder, source in canonical_documents.items() if source == embedded]
+                    if len(matches) == 1:
+                        run = matches[0]
                 if run is None and isinstance(payload.get("skill_result"), dict):
                     run = self._from_source(path, payload["skill_result"], backend_id=backend_id)
                     self.runs.append(run)
@@ -235,6 +269,7 @@ class ResultManager:
             except (ProjectError, KeyError, ValueError, TypeError, OSError):
                 self.diagnostics.append(f"无法读取执行报告：{path.relative_to(self.root).as_posix()}")
         self._load_collections(files)
+        self._unfinished_workflows(files)
         try:
             history = ChatStore(self.manager, self.project_key).history()
             for row in history:
@@ -254,6 +289,29 @@ class ResultManager:
                 run.browser_warnings.append("发现重复 run_id，需检查重复的结果目录。")
         self._loaded = True
         return self.list_runs()
+
+    def _unfinished_workflows(self, files: list[Path]) -> None:
+        """Surface unfinalized checkpoints without guessing process liveness.
+
+        A missing terminal record can mean running OR interrupted. Reading it must
+        never create a successful result, rewrite state, or resume execution.
+        """
+        from bulk_rnaseq.workspace.models import validate_name
+        for path in sorted(p for p in files if p.name in CHECKPOINT_SOURCES):
+            # Check the filesystem as well as this scan: a writer may have finished
+            # between scan entries. The terminal record always takes precedence.
+            if (path.parent / "workflow_result.json").exists():
+                continue
+            try:
+                checkpoint = self._json(path)
+                identity = validate_name(checkpoint["workflow_id"])
+                if identity != path.parent.name or checkpoint.get("status") != "running":
+                    raise ValueError("Invalid workflow checkpoint")
+                self.diagnostics.append(
+                    f"WORKFLOW_NOT_FINALIZED: {identity} has a checkpoint but no final result. "
+                    "It may still be running or may have been interrupted; automatic resume is not supported.")
+            except (ProjectError, ValueError, KeyError, TypeError, OSError):
+                self.diagnostics.append("无法识别未完成 Workflow checkpoint：" + path.relative_to(self.root).as_posix())
 
     def _load_collections(self, files: list[Path]) -> None:
         from bulk_rnaseq.workflow.models import WorkflowResult
@@ -279,10 +337,16 @@ class ResultManager:
                         for run in matches:
                             run.result_type, run.workflow_id, run.step_id = "Workflow", workflow.workflow_id, step_id
                             run.dependencies = record.get("depends_on", [])
+                            if record.get("started_at"):
+                                run.created_at = result_time(record["started_at"]).isoformat()
+                                run.time_source = "recorded"
+                            run.completed_at = record.get("finished_at") or run.completed_at
                             parents = {source.get("run_id") for source in record.get("upstream_sources", {}).values()
                                        if source.get("source") in {"workflow_step", "project_result"} and source.get("run_id")}
                             if len(parents) == 1:
                                 run.source_run_id = next(iter(parents))
+                            run.parent_run_ids = sorted(parents)
+                            run.gene_subset = record.get("upstream_sources", {}).get("gene_list", {}).get("gene_subset")
                         members.append({"step_id": step_id, "skill_name": record["skill_name"], "run_id": run_id,
                                         "status": record["status"], "dependencies": record.get("depends_on", []),
                                         "error_code": record.get("error_code"), "message": record.get("message")})
@@ -298,6 +362,8 @@ class ResultManager:
                         if run.run_id == run_id and (self.root / run.source).is_relative_to(path.parent):
                             run.result_type, run.customization_id = "Customization", identity
                             run.source_run_id = payload.get("source_run_id")
+                            run.parent_run_ids = [run.source_run_id] if run.source_run_id else []
+                            run.gene_subset = payload["changed_parameters"].get("gene_subset")
                     self.collections.append({"id": identity, "type": "Customization", "status": payload["status"],
                         "run_id": run_id, "source_run_id": payload.get("source_run_id"), "mode": payload["mode"],
                         "changed_parameters": payload["changed_parameters"], "keywords": payload.get("annotation_keywords", []),
@@ -327,7 +393,112 @@ class ResultManager:
             self.refresh()
         runs = [r for r in self.runs if (skill_name is None or r.skill_name == skill_name)
                 and (status is None or (r.has_warning if status == "warning" else r.status == status))]
-        return sorted(runs, key=lambda r: (r.created_at, r.run_id), reverse=newest_first)
+        return sorted(runs, key=lambda r: (result_time(r.created_at),
+            result_time(r.completed_at or r.created_at), r.run_id), reverse=newest_first)
+
+    def register_result(self, payload: dict[str, Any], source: Path, *, workflow_id: str | None = None,
+                        step_id: str | None = None, record: dict[str, Any] | None = None) -> ResultRef:
+        """Persist one real result immediately, including before a workflow finishes."""
+        run = self._from_source(self.validate_result_path(source), payload)
+        record = record or {}
+        parents = sorted({s["run_id"] for s in record.get("upstream_sources", {}).values() if s.get("run_id")})
+        ref = ResultRef(project_id=self.project_key, run_id=run.run_id, skill_name=run.skill_name,
+            status=run.status, workflow_id=workflow_id, step_id=step_id,
+            created_at=record.get("started_at") or run.created_at,
+            completed_at=record.get("finished_at") or run.completed_at,
+            treatment=run.parameters.get("treatment"), control=run.parameters.get("control"),
+            comparison=run.comparison, outputs={a.artifact_id: a.relative_path for a in run.artifacts
+                if a.relative_path and a.artifact_id != "result_record" and not a.error_code},
+            parent_run_ids=parents, source=run.source,
+            time_source="recorded" if record.get("started_at") else run.time_source)
+        with self.manager._write_lock():
+            self._save_ref(ref)
+        return ref
+
+    def _save_ref(self, ref: ResultRef) -> None:
+        started = monotonic()
+        folder = self.validate_result_path(self.root / "result_index", must_exist=False)
+        folder.mkdir(exist_ok=True)
+        # Run IDs are data, not filesystem components.
+        path = folder / (digest(ref.run_id.encode()).hexdigest() + ".json")
+        data = ref.model_dump(mode="json")
+        if not path.exists() or self._json(path) != data:
+            write_json(path, data)
+            LOGGER.debug("result_index write_ms=%.1f", (monotonic() - started) * 1000)
+
+    def list_result_refs(self, *, skill_name: str | None = None) -> list[ResultRef]:
+        """Backfill legacy records without editing their original results; fail closed on duplicates."""
+        persisted, refs = self._scan_refs()
+        pending = [ref for key, ref in refs.items() if ref != persisted.get(key)]
+        if pending:
+            with self.manager._write_lock():
+                folder = self.validate_result_path(self.root / "result_index", must_exist=False)
+                for ref in pending:
+                    path = folder / (digest(ref.run_id.encode()).hexdigest() + ".json")
+                    current = ResultRef.model_validate(self._json(path)) if path.exists() else None
+                    if current == ref:
+                        continue
+                    if current != persisted.get(ref.run_id):
+                        # A different registration won the race. Rescan under lock
+                        # only when the optimistic comparison detects a conflict.
+                        current_index, refs = self._scan_refs()
+                        for key, latest in refs.items():
+                            if latest != current_index.get(key):
+                                self._save_ref(latest)
+                        break
+                    self._save_ref(ref)
+        return sorted((ref for ref in refs.values() if skill_name is None or ref.skill_name == skill_name),
+                      key=lambda ref: ref.sort_key, reverse=True)
+
+    def _scan_refs(self) -> tuple[dict[str, ResultRef], dict[str, ResultRef]]:
+        """Read atomic entries before deriving refs from current project history."""
+        started = monotonic()
+        persisted = {}
+        folder = self.validate_result_path(self.root / "result_index", must_exist=False)
+        if folder.exists():
+            for path in folder.glob("*.json"):
+                ref = ResultRef.model_validate(self._json(path))
+                if ref.project_id != self.project_key:
+                    raise ProjectError("PROJECT_CONTEXT_MISMATCH", "Result index belongs to another project.")
+                self.validate_result_path(ref.source)
+                if path.name != digest(ref.run_id.encode()).hexdigest() + ".json":
+                    raise ProjectError("RESULT_INDEX_INVALID", "Result index identity does not match its file.")
+                persisted[ref.run_id] = ref
+        self._loaded = False
+        runs = self.list_runs()
+        duplicates = {key for key, count in Counter(run.run_id for run in runs).items() if count > 1}
+        refs = {key: ref for key, ref in persisted.items() if key not in duplicates}
+        for run in self.list_runs():
+            if run.run_id in duplicates:
+                continue
+            ref = ResultRef(project_id=self.project_key, run_id=run.run_id, skill_name=run.skill_name,
+                status=run.status, created_at=run.created_at, completed_at=run.completed_at,
+                workflow_id=run.workflow_id, step_id=run.step_id, treatment=run.parameters.get("treatment"),
+                control=run.parameters.get("control"), comparison=run.comparison, source=run.source,
+                outputs={a.artifact_id: a.relative_path for a in run.artifacts
+                    if a.relative_path and a.artifact_id != "result_record" and not a.error_code},
+                parent_run_ids=run.parent_run_ids or ([run.source_run_id] if run.source_run_id else []),
+                time_source=run.time_source)
+            # An interrupted workflow's durable step registration contains more lineage than a bare summary.
+            if run.run_id in refs and refs[run.run_id].workflow_id and not ref.workflow_id:
+                ref = refs[run.run_id]
+            refs[run.run_id] = ref
+        # Derived results inherit direction only from exact, agreeing parents.
+        # Never infer group direction by splitting a display label.
+        for _ in range(len(refs)):
+            changed = False
+            for identity, ref in list(refs.items()):
+                pairs = {(refs[p].treatment, refs[p].control) for p in ref.parent_run_ids
+                         if p in refs and refs[p].treatment is not None and refs[p].control is not None}
+                if ref.treatment is None and ref.control is None and len(pairs) == 1:
+                    treatment, control = next(iter(pairs))
+                    refs[identity] = ref.model_copy(update={"treatment": treatment, "control": control,
+                                                           "comparison": f"{treatment} vs {control}"})
+                    changed = True
+            if not changed:
+                break
+        LOGGER.debug("result_index read_ms=%.1f entries=%d", (monotonic() - started) * 1000, len(refs))
+        return persisted, refs
 
     def list_skill_runs(self, skill_name: str) -> list[RunInfo]:
         return self.list_runs(skill_name=skill_name)

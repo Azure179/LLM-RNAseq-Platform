@@ -15,10 +15,12 @@ from bulk_rnaseq.result_schema import SkillResult
 from bulk_rnaseq.run_io import sha256, write_json
 from bulk_rnaseq.workspace import ProjectError, ProjectManager
 from bulk_rnaseq.workspace.models import validate_name
+from bulk_rnaseq.workspace.result_manager import ResultManager
 from .history import ProjectHistory
 from .models import PlanValidationResult, StepOutputBinding, WorkflowResult
 from .validator import PlanValidator
 from .comparison_inputs import prepare_comparison_inputs
+from bulk_rnaseq.workspace.deg_reuse import DegInputSnapshot
 
 
 def _now() -> str:
@@ -33,16 +35,18 @@ class WorkflowExecutor:
         self.registry, self.manager, self.project_key = registry, manager, project_key
         self.rscript_executable, self.timeout = rscript_executable, timeout
 
-    def execute(self, validated: PlanValidationResult, *, progress: Callable[[str, str, str], None] | None = None) -> WorkflowResult:
+    def execute(self, validated: PlanValidationResult, *, progress: Callable[[str, str, str], None] | None = None,
+                current_deg: dict[str, str] | None = None) -> WorkflowResult:
         try:
-            return self._execute(validated, progress)
+            return self._execute(validated, progress, DegInputSnapshot(**current_deg) if current_deg else None)
         except ProjectError as error:
             raise SkillError(error.code, str(error), details=error.details, operation="workflow") from None
         except OSError as error:
             raise SkillError("WORKFLOW_IO_ERROR", "Workflow persistence failed; inspect its checkpoint before restarting.",
                              operation="workflow", details={"error_type": type(error).__name__}) from None
 
-    def _execute(self, validated: PlanValidationResult, progress: Callable[[str, str, str], None] | None = None) -> WorkflowResult:
+    def _execute(self, validated: PlanValidationResult, progress: Callable[[str, str, str], None] | None,
+                 current_deg: DegInputSnapshot | None) -> WorkflowResult:
         def notify(step_id: str, skill_name: str, status: str) -> None:
             if progress:
                 try:
@@ -124,6 +128,9 @@ class WorkflowExecutor:
                         elif binding.source == "project_result":
                             path, checksum = history.artifact(binding.run_id, binding.output)
                             provenance = {**binding.model_dump(), "sha256": checksum}
+                            provenance.update(source_run_id=binding.run_id,
+                                source_skill=history.lookup(self.project_key, binding.run_id).skill_name)
+                            provenance["reuse_scope"] = "current_input_snapshot" if current_deg else "historical_run"
                         else:
                             source = records[binding.step_id]
                             path = self.manager._safe_path(Path(source["outputs"][binding.output]))
@@ -131,6 +138,7 @@ class WorkflowExecutor:
                             if not path.is_file() or sha256(path) != checksum:
                                 raise SkillError("UPSTREAM_ARTIFACT_CHANGED", "Upstream output is missing or has changed.", operation="workflow")
                             provenance = {**binding.model_dump(), "run_id": source["run_id"], "sha256": checksum}
+                            provenance.update(source_run_id=source["run_id"], source_skill=source["skill_name"])
                         provenance["path"] = str(path)
                         if binding.source != "project_input" and binding.gene_subset is not None:
                             path, n_genes = self._subset(path, binding.gene_subset, step_root, parameter)
@@ -138,6 +146,7 @@ class WorkflowExecutor:
                         record["upstream_sources"][parameter] = provenance
                         arguments[parameter] = str(path)
                     if step.skill_name == "rnaseq.deg":
+                        record["design_formula"] = "~condition"
                         selection = prepare_comparison_inputs(Path(arguments["count_matrix_path"]),
                             Path(arguments["metadata_path"]), arguments["treatment"], arguments["control"],
                             step_root / "bindings")
@@ -156,6 +165,14 @@ class WorkflowExecutor:
                     record["inputs"] = arguments
                     write_json(root / "workflow_state.json", state)
                     inputs = self.registry.validate_input(step.skill_name, arguments)
+                    if current_deg:
+                        current_deg.verify(self.manager, self.project_key)
+                        # Heatmap can also consume count/metadata paths captured at
+                        # workflow startup. Verify those bound bytes against the DEG.
+                        for role, digest in current_deg.model_dump().items():
+                            if role in project_hashes and project_hashes[role] != digest:
+                                raise SkillError("STALE_DEG_RESULT", "Workflow inputs differ from the selected DEG.")
+                        record["verified_deg_input_sha256"] = current_deg.model_dump()
                     result = self.registry.execute(step.skill_name, inputs)
                     result = SkillResult.from_dict(result.to_dict())
                     if result.skill_name != step.skill_name:
@@ -190,6 +207,16 @@ class WorkflowExecutor:
                 # Store transport results separately to avoid duplicate ResultManager run discovery.
                 write_json(step_root / "execution_result.json", result.to_dict())
                 write_json(step_root / "provenance.json", record)
+                try:
+                    ResultManager(self.manager, self.project_key).register_result(result.to_dict(),
+                        step_root / "execution_result.json", workflow_id=plan.workflow_id, step_id=step_id, record=record)
+                except ProjectError as error:
+                    if error.code != "WORKSPACE_BUSY":
+                        raise
+                    # The immutable step transport/provenance is already durable.
+                    # Discovery backfills the index later; never rerun the analysis.
+                    warnings.append(f"{step_id}: RESULT_INDEX_BUSY: durable result saved; refresh Results after the other writer finishes.")
+                    logger.warning("Result index busy; persisted step remains authoritative: step=%s", step_id)
                 write_json(root / "workflow_state.json", state)
                 logger.info("step=%s status=%s run_id=%s error_code=%s", step_id, result.status, result.run_id, result.error_code)
                 notify(step_id, step.skill_name, result.status)

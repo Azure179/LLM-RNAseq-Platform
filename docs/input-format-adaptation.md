@@ -38,20 +38,4 @@ Files 页的 Count Matrix / Metadata 现在按文件内容识别分隔符，不�
 - `app/views/files.py`：上传扩展名和适配说明。
 - `tests/test_delimited_import.py`：新增 34 项测试，包含扩展名不符、BOM、metadata 顺序、数值拒绝、原件保留、失败不替换、二进制 Excel 拒绝及真实 UI 代码的 AppTest。
 
-## 真实文件验证
-
-在临时项目中，通过正式 FileImportService 导入原始 `Real_DATA_TEST/input/gene_count_matrix.xls`，并导入 `metadata.all_samples.csv`：
-
-- 24,581 个基因，9 个样本；O/OT/T 每组3个样本。
-- 非负整数检查通过；count 与 metadata 样本完全对应。
-- 逐行比较分析副本与原文件，除表头和分隔符外所有字段相同。
-- 原文件 hash 未变；未覆盖已有项目、未运行 R/DeepSeek。
-
-上述证据是后端实际导入与 UI 组件测试，不冒充浏览器鼠标验收。
-
-本次验证：新增专项 34 passed；现有导入/eggNOG/UI 专项 143 passed；全量 883 passed、60 skipped（50.44 秒）。默认未开启 API/R 集成测试。
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_delimited_import.py -q
-.\.venv\Scripts\python.exe -m pytest -q
-```
+Public edition. The detailed historical evidence is retained in the local audit archive. See the [public demonstration](../examples/demo/README.md) and the [release acceptance matrix](../PHASE10_FINAL_RELEASE_REPORT.md).

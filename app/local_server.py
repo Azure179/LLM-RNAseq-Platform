@@ -2,10 +2,12 @@
 
 from http.client import HTTPConnection
 from pathlib import Path
+import os
 import socket
 import subprocess
 from typing import IO
 from uuid import uuid4
+from bulk_rnaseq.config import load_runtime_config
 
 
 class LocalServer:
@@ -15,6 +17,7 @@ class LocalServer:
         self.log_handle: IO[bytes] | None = None
         self.log_path: Path | None = None
         self.port: int | None = None
+        self.config = load_runtime_config()
 
     @property
     def url(self) -> str:
@@ -26,7 +29,7 @@ class LocalServer:
         if not python.is_file() or not entry.is_file():
             raise RuntimeError("找不到项目 Python 环境或界面文件，请保持启动文件位于项目目录。")
         # A port owned by another process is left alone. Never kill/reuse it.
-        for port in range(8501, 8511):
+        for port in range(self.config.streamlit_port, min(self.config.streamlit_port + 10, 65536)):
             with socket.socket() as probe:
                 try:
                     probe.bind(("127.0.0.1", port))
@@ -35,8 +38,8 @@ class LocalServer:
                 self.port = port
                 break
         if self.port is None:
-            raise RuntimeError("本地端口 8501–8510 已占用，请关闭不使用的旧实例。")
-        directory = self.root / "logs" / "local_app"
+            raise RuntimeError("配置的本地端口范围已占用，请关闭不使用的旧实例。")
+        directory = self.config.workspace_root / ".service-logs" / "local_app"
         directory.mkdir(parents=True, exist_ok=True)
         self.log_path = directory / f"server-{uuid4().hex}.log"
         self.log_handle = self.log_path.open("ab", buffering=0)
@@ -46,6 +49,7 @@ class LocalServer:
                  "--server.address=127.0.0.1", f"--server.port={self.port}", "--server.headless=true"],
                 cwd=self.root, stdin=subprocess.DEVNULL, stdout=self.log_handle,
                 stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW,
+                env={**os.environ, "RNASEQ_WORKSPACE_ROOT": str(self.config.workspace_root)},
             )
         except OSError:
             self.log_handle.close()

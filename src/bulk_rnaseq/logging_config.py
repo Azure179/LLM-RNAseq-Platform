@@ -11,7 +11,8 @@ from bulk_rnaseq.logger import LOG_FORMAT
 @contextmanager
 def run_logger(path: Path, run_id: str) -> Iterator[logging.Logger]:
     # An independent Logger avoids accumulating names/handlers in the global registry.
-    logger = logging.Logger(f"bulk_rnaseq.run.{run_id}", level=logging.INFO)
+    from bulk_rnaseq.config import load_runtime_config
+    logger = logging.Logger(f"bulk_rnaseq.run.{run_id}", level=load_runtime_config().log_level)
     handler = logging.FileHandler(path, encoding="utf-8")
     handler.setFormatter(logging.Formatter(LOG_FORMAT))
     logger.addHandler(handler)

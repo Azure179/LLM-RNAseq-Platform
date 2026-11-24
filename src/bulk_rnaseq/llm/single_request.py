@@ -10,6 +10,7 @@ from bulk_rnaseq.llm.final_response import FinalResponseBuilder, FinalResponseRe
 from bulk_rnaseq.llm.tool_runner import ToolExecutionResult, ToolRunner
 from bulk_rnaseq.logging_config import run_logger
 from bulk_rnaseq.registry import SkillRegistry
+from bulk_rnaseq.result_schema import SkillResult
 from bulk_rnaseq.run_io import write_json
 
 
@@ -31,14 +32,17 @@ def combine_usage(*usages: dict[str, Any] | None) -> dict[str, Any]:
 
 
 class SingleRequestRunner:
-    def __init__(self, client: DeepSeekClient, registry: SkillRegistry) -> None:
+    def __init__(self, client: DeepSeekClient, registry: SkillRegistry, *,
+                 execute_business: Callable[[str, dict[str, Any]], SkillResult] | None = None) -> None:
         self.client, self.registry = client, registry
+        self.execute_business = execute_business
 
     def run(self, user_text: str, context: ExecutionContext, *,
             progress: Callable[[str, str | None], None] | None = None,
             before_execute: Callable[[str, dict[str, Any]], None] | None = None) -> SingleRequestResult:
         options = {"progress": progress, "before_execute": before_execute} if progress or before_execute else {}
-        execution = ToolRunner(self.client, self.registry).run(user_text, context, **options)
+        runner = ToolRunner(self.client, self.registry, execute_business=self.execute_business) if self.execute_business else ToolRunner(self.client, self.registry)
+        execution = runner.run(user_text, context, **options)
         outcome = SingleRequestResult(status=execution.status, execution=execution, final_response=execution.message,
                                       request_count=execution.request_count,
                                       usage=combine_usage((execution.llm_response or {}).get("usage")),

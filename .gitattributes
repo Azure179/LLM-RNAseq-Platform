@@ -1,0 +1,5 @@
+container/python-constraints.txt text eol=lf
+container/locks/*.txt text eol=lf
+container/locks/*.tsv text eol=lf
+examples/data/*.csv text eol=lf
+tests/fixtures/ci_science/*.tsv text eol=lf

@@ -34,8 +34,7 @@ def fake_kegg(command: tuple[str, ...], **kwargs: object) -> subprocess.Complete
     opt = dict(zip(command[2::2], command[3::2]))
     output = Path(opt["--output"])
     rows = [
-        ["map00010", "map00010", 5, 5, 5, 20, 1, .25, 4, 1 / 15504, 3 / 15504, "g1;g2;g3;g4;g5"],
-        ["map00020", "map00020", 0, 5, 15, 20, 0, .75, 0, 1, 1, ""],
+        ["map00010", "map00010", 5, 5, 5, 20, 1, .25, 4, 1 / 15504, 2 / 15504, "g1;g2;g3;g4;g5"],
         ["map01100", "map01100", 5, 5, 20, 20, 1, 1, 1, 1, 1, "g1;g2;g3;g4;g5"],
     ]
     enriched = [r for r in rows if r[2] > 0 and r[9] <= float(opt["--pvalue"]) and r[10] <= float(opt["--padj"])]
@@ -46,7 +45,7 @@ def fake_kegg(command: tuple[str, ...], **kwargs: object) -> subprocess.Complete
             writer.writerows(data)
     for name in ("kegg_dotplot.png", "kegg_barplot.png"):
         (output / name).write_bytes(fixture_png())
-    return subprocess.CompletedProcess(command, 0, f"R_VERSION=fixture\nSTATS_VERSION=fixture\nN_TERMS_TESTED=3\nN_ENRICHED={len(enriched)}\n", "")
+    return subprocess.CompletedProcess(command, 0, f"R_VERSION=fixture\nSTATS_VERSION=fixture\nCLUSTERPROFILER_VERSION=fixture\nENRICHIT_VERSION=fixture\nN_TERMS_TESTED=2\nN_ENRICHED={len(enriched)}\n", "")
 
 
 @pytest.mark.parametrize("empty", [False, True])

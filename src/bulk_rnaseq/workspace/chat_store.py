@@ -37,7 +37,7 @@ class ChatStore:
             result = json.loads(data.decode("utf-8"), object_pairs_hook=unique_object, parse_constant=reject_constant)
             if not isinstance(result, dict):
                 raise ValueError("Expected object")
-            return result
+            return self.manager.get_project_context(self.key, require_inputs=False).restore_paths(result)
         except (OSError, ValueError, TypeError):
             raise ProjectError("CHAT_RECORD_INVALID", "聊天记录无法读取；现有文件未被覆盖。") from None
 
@@ -63,6 +63,10 @@ class ChatStore:
         return rows
 
     def append(self, messages: list[dict[str, Any]]) -> None:
+        with self.manager._write_lock():
+            self._append_locked(messages)
+
+    def _append_locked(self, messages: list[dict[str, Any]]) -> None:
         rows = self.history()
         known = {(row.get("request_id"), row["role"]) for row in rows}
         rows.extend(row for row in messages if (row["request_id"], row["role"]) not in known)
@@ -86,6 +90,10 @@ class ChatStore:
 
     def save_assistant(self, message: dict[str, Any]) -> None:
         """Update a paused source-choice response, not append a duplicate conversation turn."""
+        with self.manager._write_lock():
+            self._save_assistant_locked(message)
+
+    def _save_assistant_locked(self, message: dict[str, Any]) -> None:
         rows = self.history()
         for index, row in enumerate(rows):
             if row["role"] == "assistant" and row["request_id"] == message["request_id"]:
@@ -95,7 +103,7 @@ class ChatStore:
                     raise ProjectError("CHAT_HISTORY_FULL", "聊天历史已达本地上限。")
                 write_json(self.path("chat_history.json"), payload)
                 return
-        self.append([message])
+        self._append_locked([message])
 
     def request_path(self, request_id: str) -> Path:
         try:
@@ -118,10 +126,11 @@ class ChatStore:
         if confirm is not True:
             raise ProjectError("CLEAR_CHAT_CONFIRMATION_REQUIRED", "请确认仅清空聊天历史。")
         with self.lock():
-            source = self.path("chat_history.json")
-            if source.exists():
-                self.history()  # Refuse to discard a corrupt record implicitly.
-                archive = self.path("chat_archive")
-                archive.mkdir(exist_ok=True)
-                source.rename(self.manager._safe_path(archive / (str(uuid4()) + ".json")))
-            write_json(source, {"version": 1, "messages": []})
+            with self.manager._write_lock():
+                source = self.path("chat_history.json")
+                if source.exists():
+                    self.history()  # Refuse to discard a corrupt record implicitly.
+                    archive = self.path("chat_archive")
+                    archive.mkdir(exist_ok=True)
+                    source.rename(self.manager._safe_path(archive / (str(uuid4()) + ".json")))
+                write_json(source, {"version": 1, "messages": []})

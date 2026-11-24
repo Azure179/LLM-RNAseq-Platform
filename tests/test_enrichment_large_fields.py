@@ -46,12 +46,12 @@ def test_large_overlap_field_retains_membership_validation_and_csv_limit(
         if corrupt != "none":
             with pytest.raises(SkillError) as caught:
                 verify_enrichment_outputs(tmp_path, prepared, {term: ("Synthetic test", "BP")}, 1, 1,
-                                          "R_VERSION=fixture\nSTATS_VERSION=fixture\nN_TERMS_TESTED=1\nN_ENRICHED=1\n", **kwargs)
+                                          "R_VERSION=fixture\nSTATS_VERSION=fixture\nCLUSTERPROFILER_VERSION=fixture\nENRICHIT_VERSION=fixture\nN_TERMS_TESTED=1\nN_ENRICHED=1\n", **kwargs)
             expected = "Overlapping gene IDs" if corrupt == "membership" else "field larger than field limit"
             assert expected in caught.value.details["reason"]
         else:
             count, _ = verify_enrichment_outputs(tmp_path, prepared, {term: ("Synthetic test", "BP")}, 1, 1,
-                                                 "R_VERSION=fixture\nSTATS_VERSION=fixture\nN_TERMS_TESTED=1\nN_ENRICHED=1\n", **kwargs)
+                                                 "R_VERSION=fixture\nSTATS_VERSION=fixture\nCLUSTERPROFILER_VERSION=fixture\nENRICHIT_VERSION=fixture\nN_TERMS_TESTED=1\nN_ENRICHED=1\n", **kwargs)
             assert count == 1
         assert csv.field_size_limit() == 131072
     finally:

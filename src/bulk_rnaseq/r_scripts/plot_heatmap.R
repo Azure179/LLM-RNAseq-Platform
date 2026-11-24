@@ -23,7 +23,8 @@ tryCatch({
   nc <- ncol(matrix)
   # Top-ranked gene is at the top; no hidden reordering or clipping of Z-scores.
   value <- function(key, default) if (is.null(options[[key]])) default else options[[key]]
-  grDevices::png(options$plot, width = as.integer(value("width", 1500)), height = as.integer(value("height", max(1000, min(3000, 400 + nr * 28)))), res = 150)
+  grDevices::png(options$plot, width = as.integer(value("width", 1500)), height = as.integer(value("height", max(1000, min(3000, 400 + nr * 28)))), res = 150,
+    type = if (.Platform$OS.type == "unix" && capabilities("cairo")) "cairo" else getOption("bitmapType"))
   tryCatch({
     graphics::layout(matrix(c(1, 2, 3, 4), 2, 2, byrow = TRUE), heights = c(1, 6), widths = c(5, 1.8))
     graphics::par(mar = c(0.5, 9, 2.5, 0.5))

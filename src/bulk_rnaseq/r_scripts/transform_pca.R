@@ -51,7 +51,8 @@ run_pca <- function() {
 
   levels <- sort(unique(groups))
   colors <- stats::setNames(grDevices::hcl.colors(length(levels), palette = "Dark 3"), levels)
-  grDevices::png(file.path(output, "pca_plot.png"), width = 1200, height = 900, res = 150)
+  grDevices::png(file.path(output, "pca_plot.png"), width = 1200, height = 900, res = 150,
+    type = if (.Platform$OS.type == "unix" && capabilities("cairo")) "cairo" else getOption("bitmapType"))
   tryCatch({
     graphics::par(mar = c(5, 5, 3, 9))
     graphics::plot(coordinates$PC1, coordinates$PC2, pch = 21, cex = 1.5,

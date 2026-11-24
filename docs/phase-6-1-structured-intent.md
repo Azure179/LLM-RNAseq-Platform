@@ -162,7 +162,7 @@ Mock fixture 只验证工程边界，绝不作为真实 DeepSeek 语义测试证
 
 模型实际返回 `deepseek-flash`，20/20 通过，pytest 用时 21.02 秒。
 完整原始记录：
-[最终 20 例报告](../outputs/deepseek_tests/intent_20260916T105210661699Z/llm_intent_test_results.json)。
+最终 20 例报告（本地验收记录，未随包分发）。
 
 | Cases | 验证内容 | 结果 |
 |---|---|---|

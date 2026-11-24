@@ -57,9 +57,7 @@ geneB	map00010
 - 某一行有 KO、但 KEGG_Pathway 为 `-`，仍是“没有 pathway 映射”。
 - `Description` 描述蛋白功能，不拿它命名 pathway。
 
-此前提供的黑鲷 Excel 已完整只读验证：Sheet1 第 3 行表头，A 列为 query，M 列为 KEGG_Pathway。
-解析 35,951 数据行，19,972 行无 pathway；参考编号统一后有 83,294 个唯一关联、393 个 pathway。
-这是格式兼容验证，**不是对黑鲷的真实 DEG 做了富集分析**。
+Historical input-format checks used a private workbook. For the current enrichment engine and public input data see the [demo](../examples/demo/README.md).
 
 ## Pathway ID 映射规则
 

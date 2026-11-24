@@ -1,0 +1,13 @@
+# Explicit fallback when Docker Hub is unavailable. Requires the audited image locally.
+# Use the normal Dockerfile for any application/dependency change.
+services:
+  api:
+    build:
+      dockerfile: container/Dockerfile.cached
+      args:
+        RNASEQ_CACHED_IMAGE: ${RNASEQ_CACHED_IMAGE:-bulk-rnaseq:phase9-5}
+  streamlit:
+    build:
+      dockerfile: container/Dockerfile.cached
+      args:
+        RNASEQ_CACHED_IMAGE: ${RNASEQ_CACHED_IMAGE:-bulk-rnaseq:phase9-5}

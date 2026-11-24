@@ -74,7 +74,9 @@ def _prepare(service: "FileImportService", project_key: str, registry: SkillRegi
             if name not in confirmed or not isinstance(parameters, dict):
                 raise ValueError("Unknown Skill or invalid parameter object")
             confirmed[name].update(parameters)
+        from bulk_rnaseq.config import load_runtime_config
         context = ExecutionContext(project_root=project.root, output_root=project.root / "results",
+                                   rscript_executable=load_runtime_config().rscript_executable,
                                    bindings=bindings, confirmed_parameters=confirmed)
         context.check(registry, ToolAdapter(registry))
     except (DeepSeekError, ValidationError, ValueError, TypeError, AttributeError):

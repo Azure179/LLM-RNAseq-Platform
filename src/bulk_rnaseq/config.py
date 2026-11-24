@@ -4,6 +4,54 @@ from dataclasses import dataclass
 from pathlib import Path
 import tomllib
 from typing import Any
+from collections.abc import Mapping
+import os
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeConfig:
+    """Host-only settings; no API key is stored in this object."""
+
+    workspace_root: Path
+    rscript_executable: str
+    api_host: str
+    api_port: int
+    streamlit_host: str
+    streamlit_port: int
+    log_level: str
+
+
+def load_runtime_config(*, environ: Mapping[str, str] | None = None) -> RuntimeConfig:
+    """Process environment overrides local defaults; no implicit dotenv search.
+
+    DeepSeek retains its existing, explicit .env loader. Service settings use the
+    existing config module and Uvicorn/Streamlit's native environment names.
+    """
+    env = os.environ if environ is None else environ
+
+    def value(name: str, default: str) -> str:
+        result = env.get(name, default)
+        if not result.strip() or any(ord(c) < 32 for c in result):
+            raise ValueError(f"Invalid environment setting: {name}")
+        return result
+
+    def port(name: str, default: str) -> int:
+        try:
+            result = int(value(name, default))
+            if not 1 <= result <= 65535:
+                raise ValueError
+            return result
+        except ValueError:
+            raise ValueError(f"Invalid port setting: {name}") from None
+
+    level = value("RNASEQ_LOG_LEVEL", "INFO").upper()
+    if level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+        raise ValueError("Invalid environment setting: RNASEQ_LOG_LEVEL")
+    return RuntimeConfig(
+        Path(value("RNASEQ_WORKSPACE_ROOT", "workspace")).expanduser().resolve(),
+        value("RNASEQ_RSCRIPT", "Rscript"), value("UVICORN_HOST", "127.0.0.1"),
+        port("UVICORN_PORT", "8000"), value("STREAMLIT_SERVER_ADDRESS", "127.0.0.1"),
+        port("STREAMLIT_SERVER_PORT", "8501"), level)
 
 
 @dataclass(frozen=True, slots=True)

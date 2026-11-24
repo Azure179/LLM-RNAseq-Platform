@@ -1,0 +1,5 @@
+# Optional offline deployment packaging of an ALREADY audited application image.
+# This does not rebuild application source or dependencies. See container/README.md.
+ARG RNASEQ_CACHED_IMAGE=bulk-rnaseq:phase9-5
+FROM ${RNASEQ_CACHED_IMAGE}
+COPY container/README.md /opt/rnaseq/compose-deployment.md

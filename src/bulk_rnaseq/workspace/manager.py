@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 import json
 import logging
+from time import monotonic, sleep
 from pathlib import Path
 from typing import Any, Callable, ParamSpec, TypeVar
 from uuid import uuid4
@@ -25,6 +26,8 @@ from bulk_rnaseq.workspace.models import (
 LOGGER = logging.getLogger(__name__)
 P = ParamSpec("P")
 T = TypeVar("T")
+LOCK_WAIT_SECONDS = 5.0
+LOCK_POLL_SECONDS = 0.125
 MAX_METADATA_BYTES = 64 * 1024
 
 
@@ -75,16 +78,31 @@ class ProjectManager:
     def _write_lock(self) -> Iterator[None]:
         """One cooperating writer per workspace; stale locks are never auto-deleted."""
         lock = self._safe_path(self.root / ".workspace.lock")
-        try:
-            handle = lock.open("x", encoding="utf-8")
-        except FileExistsError:
-            raise ProjectError("WORKSPACE_BUSY", "Another project update is active, or a stale workspace lock requires inspection.") from None
+        started = monotonic()
+        deadline = started + LOCK_WAIT_SECONDS
+        collisions = 0
+        while True:
+            try:
+                handle = lock.open("x", encoding="utf-8")
+                break
+            except FileExistsError:
+                collisions += 1
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    LOGGER.warning("workspace_lock wait_ms=%.1f contention=%d timeout=1",
+                                   (monotonic() - started) * 1000, collisions)
+                    raise ProjectError("WORKSPACE_BUSY", "Timed out waiting for a workspace update. Inspect persistent locks.") from None
+                sleep(min(LOCK_POLL_SECONDS, remaining))
+        acquired = monotonic()
         try:
             with handle:
                 handle.write(str(uuid4()))
             yield
         finally:
             lock.unlink(missing_ok=True)
+            LOGGER.log(logging.INFO if collisions else logging.DEBUG,
+                       "workspace_lock wait_ms=%.1f hold_ms=%.1f contention=%d timeout=0",
+                       (acquired - started) * 1000, (monotonic() - acquired) * 1000, collisions)
 
     def _read(self, key: str) -> ProjectSnapshot:
         root = self._project_path(key)
@@ -214,13 +232,13 @@ class ProjectManager:
             return updated
 
     @_safe_io
-    def get_project_context(self, project_key: str) -> ProjectContext:
+    def get_project_context(self, project_key: str, *, require_inputs: bool = True) -> ProjectContext:
         project = self._read(project_key)
         resolved: dict[str, Path | None] = {}
         for role in FILE_ROLES:
             value = getattr(project.metadata.files, role)
             path = self._safe_path(project.root / value) if value is not None else None
-            if path is not None and not path.is_file():
+            if require_inputs and path is not None and not path.is_file():
                 raise ProjectError("PROJECT_FILE_MISSING", "A registered input file is missing. Re-import or restore it.", details={"role": role})
             resolved[role] = path
         return ProjectContext(project.key, project.metadata.project_name, project.root, project.root / "input",

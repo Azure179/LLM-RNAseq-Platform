@@ -169,5 +169,6 @@ class WorkflowPlanner:
         check = self.validator.validate(workflow, context)
         if not check.valid:
             raise DeepSeekError("LLM_PLANNER_PLAN_INVALID", "Local dependency validator rejected the proposed plan; it was not repaired or executed.",
-                                details={"error_codes": sorted({issue.code for issue in check.errors})})
+                                details={"error_codes": sorted({issue.code for issue in check.errors}),
+                                         "errors": [issue.model_dump(mode="json") for issue in check.errors]})
         return PlannerResponse(decision, workflow, check, response, prompt_hash)

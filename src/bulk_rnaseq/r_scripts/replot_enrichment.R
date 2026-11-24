@@ -5,7 +5,8 @@ tryCatch({
   opt <- setNames(as.list(args[seq(2, length(args), 2)]), sub("^--", "", args[seq(1, length(args), 2)]))
   data <- read.csv(opt$data, check.names = FALSE, colClasses = "character", fileEncoding = "UTF-8-BOM")
   for (kind in c("dotplot", "barplot")) {
-    png(file.path(opt$output, paste0(kind, ".png")), width=as.integer(opt$width), height=as.integer(opt$height), res=130)
+    png(file.path(opt$output, paste0(kind, ".png")), width=as.integer(opt$width), height=as.integer(opt$height), res=130,
+        type = if (.Platform$OS.type == "unix" && capabilities("cairo")) "cairo" else getOption("bitmapType"))
     tryCatch({
       if (!nrow(data)) {
         plot.new(); title(opt$title); text(.5, .5, "Enrichment succeeded; no significant terms in source result")

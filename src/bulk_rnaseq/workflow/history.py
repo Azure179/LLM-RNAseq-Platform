@@ -19,31 +19,38 @@ class ProjectHistory:
             return None
         try:
             self.results.refresh()
-            run = self.results.get_run(run_id)
-            if run.run_id != run_id:
-                return None  # A backend request ID is not a Skill run ID.
+            matches = [r for r in self.results.list_result_refs() if r.run_id == run_id]
+            if len(matches) != 1:
+                return None
+            run = matches[0]
             keys = set()
-            for artifact in run.artifacts:
-                if artifact.artifact_id != "result_record":
-                    try:
-                        self.results.get_artifact(run_id, artifact.artifact_id)
-                        keys.add(artifact.artifact_id)
-                    except ProjectError:
-                        pass
+            for key, path in run.outputs.items():
+                try:
+                    self.results.validate_result_path(path)
+                    keys.add(key)
+                except ProjectError:
+                    pass
             return HistoricalRun(project_id, run_id, run.skill_name, run.status, frozenset(keys))
-        except ProjectError:
+        except ProjectError as error:
+            if error.code == "WORKSPACE_BUSY":
+                raise SkillError("WORKSPACE_BUSY", "Workspace is busy; historical results have not been declared missing.",
+                                 operation="workflow") from error
             return None
 
     def artifact(self, run_id: str, output: str) -> tuple[Path, str]:
         run = self.lookup(self.project_key, run_id)
         if run is None or run.status != "succeeded" or output not in run.outputs:
             raise SkillError("MISSING_UPSTREAM_DEPENDENCY", "Historical output is unavailable.", operation="workflow")
-        info = self.results.get_run(run_id)
-        artifact = self.results.get_artifact(run_id, output)
-        path = self.results.validate_result_path(artifact.relative_path)
+        info = next(r for r in self.results.list_result_refs() if r.run_id == run_id)
+        path = self.results.validate_result_path(info.outputs[output])
         payload = self.results._json(self.results.root / info.source)
         if info.source.endswith("tool_execution.json"):
             payload = payload["skill_result"]
+        from bulk_rnaseq.result_schema import SkillResult
+        actual = SkillResult.from_dict(payload)
+        if (actual.run_id != run_id or actual.skill_name != info.skill_name or actual.status != "succeeded"
+                or output not in actual.outputs or self.results.validate_result_path(actual.outputs[output]) != path):
+            raise SkillError("UPSTREAM_REFERENCE_MISMATCH", "Result index differs from its canonical SkillResult.", operation="workflow")
         provenance = (payload.get("metadata", {}).get("provenance", {})
                       if payload.get("schema_version") == "2.0" else payload.get("provenance", {}))
         expected = provenance.get("artifact_sha256", {}).get(path.name)

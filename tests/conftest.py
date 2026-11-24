@@ -1,6 +1,7 @@
 """Shared pytest data and explicit opt-in for real R integration tests."""
 
 from pathlib import Path
+from contextvars import ContextVar
 import shutil
 import socket
 
@@ -31,9 +32,28 @@ def prevent_unapproved_network(request: pytest.FixtureRequest, monkeypatch: pyte
     """Even with --run-llm, only llm-marked tests may connect; MockTransport stays usable."""
     if request.config.getoption("--run-llm") and request.node.get_closest_marker("llm"):
         return
+    original_connect = socket.socket.connect
+    original_socketpair = socket.socketpair
+    inside_socketpair = ContextVar("pytest_internal_socketpair", default=False)
+
+    def local_socketpair(*args: object, **kwargs: object):
+        # Windows asyncio uses a loopback socketpair for its internal wakeup pipe.
+        # Only this stdlib operation can opt in, never an application destination.
+        token = inside_socketpair.set(True)
+        try:
+            return original_socketpair(*args, **kwargs)
+        finally:
+            inside_socketpair.reset(token)
+
+    def guarded_connect(connection: socket.socket, address: object) -> None:
+        if inside_socketpair.get() and isinstance(address, tuple) and address[0] in {"127.0.0.1", "::1"}:
+            return original_connect(connection, address)
+        blocked()
+
     def blocked(*args: object, **kwargs: object) -> None:
         raise AssertionError("Network blocked: use an llm-marked test with explicit --run-llm.")
-    monkeypatch.setattr(socket.socket, "connect", blocked)
+    monkeypatch.setattr(socket, "socketpair", local_socketpair)
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
     monkeypatch.setattr(socket.socket, "connect_ex", blocked)
     monkeypatch.setattr(socket, "create_connection", blocked)
 

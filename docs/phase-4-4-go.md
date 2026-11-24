@@ -57,9 +57,7 @@ GO ID 校验规则是 `GO:` + 7 位数字。**本版不联网核实 term 是否�
 - 不将 eggNOG 的蛋白质 `Description` 错当成 GO term 名称。
 - eggNOG 中 query 如果是转录本/蛋白 ID，而 DEG 是 gene-level ID，需要用户提供明确转换关系；不做猜测或自动合并。
 
-已只读验证用户提供的 workbook：Sheet1 前两行是说明，第 3 行是表头，`query` 在 A 列，`GOs` 在 J 列。
-完整解析得到 35,951 条数据行、4,191,346 个唯一关联、23,492 个不同 GO ID，其中 8,244 行没有 GO。
-这只是格式兼容性验证，**不是对黑鲷做了富集分析**，也不代表已验证注释的生物学正确性。
+Historical input-format checks used a private workbook. For the current enrichment engine and public input data see the [demo](../examples/demo/README.md).
 
 ### ontology
 

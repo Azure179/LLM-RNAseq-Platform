@@ -106,3 +106,15 @@ class ProjectContext:
     metadata: Path | None
     go_mapping: Path | None
     kegg_mapping: Path | None
+
+    def resolve_path(self, value: str | Path, *, must_exist: bool = False) -> Path:
+        from bulk_rnaseq.project_paths import ProjectPaths
+        return ProjectPaths(self.project_root, self.project_key).resolve(value, must_exist=must_exist)
+
+    def portable_path(self, value: str | Path) -> str:
+        from bulk_rnaseq.project_paths import ProjectPaths
+        return ProjectPaths(self.project_root, self.project_key).reference(value)
+
+    def restore_paths(self, payload: Any) -> Any:
+        from bulk_rnaseq.project_paths import ProjectPaths
+        return ProjectPaths(self.project_root, self.project_key).decode(payload)

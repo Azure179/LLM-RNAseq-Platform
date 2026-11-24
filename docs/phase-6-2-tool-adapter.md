@@ -179,10 +179,10 @@ HTTP 错误仍使用原有安全 error code；Tool Adapter 新增：
 
 ### 真实 API 结果
 
-报告目录：[本次真实验收](../outputs/deepseek_tests/tools_20260916T151126814535Z/)。
+报告目录：本次真实验收（本地验收记录，未随包分发）。
 
-- [tool_definitions.json](../outputs/deepseek_tests/tools_20260916T151126814535Z/tool_definitions.json)：实际发送的全部六个定义。
-- [tool_schema_acceptance.json](../outputs/deepseek_tests/tools_20260916T151126814535Z/tool_schema_acceptance.json)：真实响应、schema hash、模型、usage、latency 和未执行标记。
+- tool_definitions.json（本地验收记录，未随包分发）：实际发送的全部六个定义。
+- tool_schema_acceptance.json（本地验收记录，未随包分发）：真实响应、schema hash、模型、usage、latency 和未执行标记。
 
 模拟用户句子：`Compare OT and T differential expression. OT is treatment and T is control.`
 实际模型：`deepseek-flash`；API 请求成功，finish_reason=`tool_calls`。
